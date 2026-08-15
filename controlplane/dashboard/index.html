@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ControlPlane.ai — Real-time AI Observability</title>
+    <meta name="description" content="ControlPlane Checker: Real-time AI oversight across performance, cost, and responsibility dimensions.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/dashboard/style.css">
+</head>
+<body>
+    <!-- ─── Top Navigation ─────────────────────────────────────────────── -->
+    <header class="top-bar">
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="2" width="28" height="28" rx="8" stroke="url(#grad1)" stroke-width="2.5"/>
+                    <path d="M10 16L14 20L22 12" stroke="url(#grad1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <defs>
+                        <linearGradient id="grad1" x1="0" y1="0" x2="32" y2="32">
+                            <stop stop-color="#6366f1"/>
+                            <stop offset="1" stop-color="#06b6d4"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <span class="logo-text">ControlPlane<span class="logo-dot">.ai</span></span>
+        </div>
+        <div class="top-bar-center">
+            <span class="mode-badge" id="modeBadge">MOCK MODE</span>
+            <span class="status-dot live" id="statusDot"></span>
+            <span class="status-text" id="statusText">Connecting…</span>
+        </div>
+        <div class="top-bar-right">
+            <button class="btn btn-primary" id="simulateBtn" onclick="simulateTraffic()">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2L12 8L4 14V2Z" fill="currentColor"/></svg>
+                Simulate Traffic
+            </button>
+        </div>
+    </header>
+
+    <!-- ─── Main Layout ────────────────────────────────────────────────── -->
+    <main class="main-grid">
+        <!-- ─── Left Column: Dimension Gauges + Charts ─────────────────── -->
+        <aside class="sidebar">
+            <!-- Summary Cards -->
+            <div class="stat-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalRequests">0</div>
+                    <div class="stat-label">Total Requests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalCost">$0.00</div>
+                    <div class="stat-label">Total Cost</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avgLatency">0ms</div>
+                    <div class="stat-label">Avg Latency</div>
+                </div>
+            </div>
+
+            <!-- Dimension Gauges -->
+            <div class="gauges-section">
+                <h3 class="section-title">Risk Dimensions</h3>
+                <div class="gauge-row">
+                    <div class="gauge-card" id="gaugePerformance">
+                        <div class="gauge-ring">
+                            <svg viewBox="0 0 100 100">
+                                <circle cx="50" cy="50" r="42" class="gauge-bg"/>
+                                <circle cx="50" cy="50" r="42" class="gauge-fill perf" id="gaugePerfRing"
+                                    stroke-dasharray="264" stroke-dashoffset="264"/>
+                            </svg>
+                            <div class="gauge-value" id="gaugePerfValue">—</div>
+                        </div>
+                        <div class="gauge-label">Performance</div>
+                        <div class="gauge-sub" id="gaugePerfSub">No data</div>
+                    </div>
+                    <div class="gauge-card" id="gaugeCost">
+                        <div class="gauge-ring">
+                            <svg viewBox="0 0 100 100">
+                                <circle cx="50" cy="50" r="42" class="gauge-bg"/>
+                                <circle cx="50" cy="50" r="42" class="gauge-fill cost" id="gaugeCostRing"
+                                    stroke-dasharray="264" stroke-dashoffset="264"/>
+                            </svg>
+                            <div class="gauge-value" id="gaugeCostValue">—</div>
+                        </div>
+                        <div class="gauge-label">Cost</div>
+                        <div class="gauge-sub" id="gaugeCostSub">No data</div>
+                    </div>
+                    <div class="gauge-card" id="gaugeResponsibility">
+                        <div class="gauge-ring">
+                            <svg viewBox="0 0 100 100">
+                                <circle cx="50" cy="50" r="42" class="gauge-bg"/>
+                                <circle cx="50" cy="50" r="42" class="gauge-fill resp" id="gaugeRespRing"
+                                    stroke-dasharray="264" stroke-dashoffset="264"/>
+                            </svg>
+                            <div class="gauge-value" id="gaugeRespValue">—</div>
+                        </div>
+                        <div class="gauge-label">Responsibility</div>
+                        <div class="gauge-sub" id="gaugeRespSub">No data</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="chart-section">
+                <h3 class="section-title">Cost Trend</h3>
+                <div class="chart-container">
+                    <canvas id="costChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <h3 class="section-title">Risk Distribution</h3>
+                <div class="chart-container chart-small">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <h3 class="section-title">Top Flagged Categories</h3>
+                <div class="chart-container">
+                    <canvas id="flagsChart"></canvas>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ─── Center: Live Feed ──────────────────────────────────────── -->
+        <section class="feed-section">
+            <div class="feed-header">
+                <h2 class="section-title">Live Feed</h2>
+                <div class="feed-filters">
+                    <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All</button>
+                    <button class="filter-btn" data-filter="high" onclick="setFilter('high', this)">
+                        <span class="risk-dot high"></span>High
+                    </button>
+                    <button class="filter-btn" data-filter="medium" onclick="setFilter('medium', this)">
+                        <span class="risk-dot medium"></span>Medium
+                    </button>
+                    <button class="filter-btn" data-filter="low" onclick="setFilter('low', this)">
+                        <span class="risk-dot low"></span>Low
+                    </button>
+                </div>
+            </div>
+            <div class="feed-list" id="feedList">
+                <div class="feed-empty" id="feedEmpty">
+                    <div class="feed-empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+                            <path d="M24 14V26M24 32V34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <p>No AI traffic observed yet.</p>
+                    <p class="feed-empty-sub">Click <strong>Simulate Traffic</strong> to generate sample requests.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ─── Right Column: Detail Panel ─────────────────────────────── -->
+        <aside class="detail-panel" id="detailPanel">
+            <div class="detail-placeholder" id="detailPlaceholder">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                    <rect x="4" y="4" width="32" height="32" rx="6" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+                    <path d="M14 20H26M20 14V26" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
+                </svg>
+                <p>Select a request to view details</p>
+            </div>
+            <div class="detail-content" id="detailContent" style="display:none;">
+                <div class="detail-header">
+                    <h3>Request Detail</h3>
+                    <button class="btn-icon" onclick="closeDetail()" title="Close">✕</button>
+                </div>
+                <div class="detail-meta" id="detailMeta"></div>
+                <div class="detail-body" id="detailBody"></div>
+            </div>
+        </aside>
+    </main>
+
+    <script src="/dashboard/app.js"></script>
+</body>
+</html>
