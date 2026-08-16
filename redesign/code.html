@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ControlPlane.ai - Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#d9dad6",
+                        "primary-fixed-dim": "#add19a",
+                        "tertiary": "#52634c",
+                        "on-surface": "#2a2c28",
+                        "risk-medium": "#E6A15C",
+                        "dimension-performance": "#7E90D2",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#d4e8cb",
+                        "dimension-cost": "#4FBCCF",
+                        "inverse-surface": "#2e312e",
+                        "error-container": "#ffdad6",
+                        "dimension-responsibility": "#a9bca0",
+                        "on-tertiary-fixed-variant": "#3a4b36",
+                        "surface-variant": "#e9eadd",
+                        "on-secondary-fixed": "#002108",
+                        "inverse-primary": "#add19a",
+                        "outline": "#8a8f84",
+                        "on-primary-fixed": "#052100",
+                        "on-surface-variant": "#5a5e55",
+                        "primary": "#4a5d40",
+                        "surface-container": "#f1f2e8",
+                        "on-error-container": "#93000a",
+                        "surface-tint": "#4a5d40",
+                        "on-primary-fixed-variant": "#304e24",
+                        "tertiary-fixed-dim": "#b9ccb0",
+                        "surface-container-highest": "#e5e6db",
+                        "inverse-on-surface": "#f0f1ec",
+                        "outline-variant": "#d5d8cc",
+                        "background": "#fafcf5",
+                        "surface-bright": "#fafcf5",
+                        "background-matcha-wash": "#f4f6ec",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed": "#c9edb5",
+                        "on-secondary-container": "#356c3e",
+                        "primary-container": "#9dc08b",
+                        "surface": "#fdfef8",
+                        "secondary-container": "#afecb2",
+                        "on-background": "#2a2c28",
+                        "surface-container-low": "#f6f7ef",
+                        "on-tertiary-fixed": "#101f0d",
+                        "tertiary-container": "#a9bca0",
+                        "risk-low": "#a9bca0",
+                        "on-primary": "#ffffff",
+                        "on-primary-container": "#314f25",
+                        "on-secondary-fixed-variant": "#185126",
+                        "error": "#ba1a1a",
+                        "surface-container-high": "#ebece0",
+                        "risk-high": "#d68a7c",
+                        "on-tertiary-container": "#3b4c36",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary": "#3a5c40",
+                        "secondary-fixed": "#b4f1b7",
+                        "secondary-fixed-dim": "#99d59d"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "detail-width": "420px",
+                        "sidebar-width": "340px",
+                        "stack-gap": "1.25rem",
+                        "gutter": "2rem",
+                        "card-padding": "1.5rem"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter", "sans-serif"],
+                        "headline-md": ["Playfair Display", "serif"],
+                        "data-mono": ["JetBrains Mono", "monospace"],
+                        "body-sm": ["Inter", "sans-serif"],
+                        "label-caps": ["Inter", "sans-serif"],
+                        "headline-lg": ["Playfair Display", "serif"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600", "letterSpacing": "-0.01em" }],
+                        "data-mono": ["13px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "body-sm": ["13.5px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "600" }],
+                        "headline-lg": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.02em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Subtle Paper Grain Texture */
+        .paper-texture {
+            position: relative;
+        }
+        .paper-texture::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+            opacity: 0.8;
+            mix-blend-mode: multiply;
+            pointer-events: none;
+            border-radius: inherit;
+            z-index: 0;
+        }
+
+        .glass-panel {
+            background: rgba(253, 254, 248, 0.85); /* surface color */
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(213, 216, 204, 0.6); /* outline-variant */
+            box-shadow: 0 8px 32px rgba(42, 44, 40, 0.03), 0 2px 8px rgba(42, 44, 40, 0.02);
+            /* Irregular, organic border radius */
+            border-radius: 20px 24px 22px 26px;
+        }
+        
+        .feed-item {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            animation: slideIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            opacity: 0;
+            transform: translateY(12px);
+            border-radius: 18px 22px 20px 24px;
+        }
+        .feed-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 36px rgba(42, 44, 40, 0.06), 0 4px 12px rgba(42, 44, 40, 0.04);
+            border-color: rgba(213, 216, 204, 0.9);
+        }
+        @keyframes slideIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .feed-item:nth-child(1) { animation-delay: 0.1s; }
+        .feed-item:nth-child(2) { animation-delay: 0.15s; }
+        .feed-item:nth-child(3) { animation-delay: 0.2s; }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Softer, more organic scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(138, 143, 132, 0.2); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(138, 143, 132, 0.4); }
+
+        .document-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent 0%, rgba(213, 216, 204, 0.6) 15%, rgba(213, 216, 204, 0.6) 85%, transparent 100%);
+            margin: 1.5rem 0;
+        }
+    </style>
+</head>
+<body class="bg-background-matcha-wash text-on-surface h-screen overflow-hidden flex flex-col relative paper-texture">
+<!-- Background Animation -->
+<div class="absolute inset-0 z-0 pointer-events-none opacity-30 mix-blend-multiply">
+
+</div>
+<!-- Top Navigation -->
+<nav class="bg-background-matcha-wash/70 dark:bg-on-surface/80 backdrop-blur-lg flex justify-between items-center w-full px-8 h-20 sticky top-0 z-50 bg-transparent border-b border-outline-variant/40">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[32px]" style="font-variation-settings: 'FILL' 1;">eco</span>
+<span class="text-headline-lg font-headline-lg text-primary dark:text-primary-fixed-dim tracking-tight">ControlPlane.ai</span>
+</div>
+<div class="flex gap-6 ml-10">
+<a class="text-primary dark:text-primary-fixed-dim border-b-[1.5px] border-primary dark:border-primary-fixed-dim pb-1.5 text-label-caps font-label-caps uppercase tracking-widest" href="#">Dashboard</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-300 text-label-caps font-label-caps uppercase tracking-widest" href="#">Analytics</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-300 text-label-caps font-label-caps uppercase tracking-widest" href="#">Compliance</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-300 text-label-caps font-label-caps uppercase tracking-widest" href="#">Settings</a>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<span class="text-label-caps font-label-caps bg-surface-container px-3 py-1.5 rounded-full text-on-surface-variant tracking-widest border border-outline-variant/30 shadow-sm">MOCK MODE</span>
+<div class="flex items-center gap-2.5">
+<div class="w-2 h-2 rounded-full bg-risk-low shadow-[0_0_8px_rgba(169,188,160,0.6)]"></div>
+<span class="text-body-sm font-body-sm text-on-surface-variant italic">Connected</span>
+</div>
+<div class="flex items-center gap-4 ml-6 border-l border-outline-variant/40 pl-6">
+<button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">notifications_none</span></button>
+<button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">person_outline</span></button>
+<button class="bg-primary text-on-primary px-5 py-2.5 rounded-[14px_16px_14px_16px] text-body-sm font-body-sm flex items-center gap-2 hover:bg-primary/90 transition-all active:scale-[0.98] shadow-md hover:shadow-lg border border-primary/20">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+                    Simulate Traffic
+                </button>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex overflow-hidden relative z-10 p-6 gap-6 max-w-[1700px] mx-auto w-full">
+<!-- Sidebar (Left) -->
+<aside class="w-[340px] flex-shrink-0 flex flex-col gap-6 overflow-y-auto custom-scrollbar pb-6 pr-2">
+<!-- Summary Stats -->
+<div class="grid grid-cols-3 gap-3">
+<div class="glass-panel paper-texture p-4 flex flex-col items-center justify-center text-center">
+<span class="text-headline-md font-headline-md text-on-surface mb-1">23</span>
+<span class="text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">Total<br/>Requests</span>
+</div>
+<div class="glass-panel paper-texture p-4 flex flex-col items-center justify-center text-center">
+<span class="text-headline-md font-headline-md text-on-surface mb-1">$1.21</span>
+<span class="text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">Resource<br/>Cost</span>
+</div>
+<div class="glass-panel paper-texture p-4 flex flex-col items-center justify-center text-center">
+<span class="text-headline-md font-headline-md text-on-surface mb-1">1.7s</span>
+<span class="text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">System<br/>Latency</span>
+</div>
+</div>
+<!-- System Vitality -->
+<div class="glass-panel paper-texture p-6 flex flex-col gap-5">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline">eco</span>
+                    System Vitality
+                </h3>
+<div class="flex justify-between items-end px-1">
+<div class="flex flex-col items-center gap-3">
+<div class="relative w-16 h-16">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<path class="text-surface-variant" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="100, 100" stroke-linecap="round" stroke-width="2.5"></path>
+<path class="text-dimension-performance" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="87, 100" stroke-linecap="round" stroke-width="2.5"></path>
+</svg>
+<span class="absolute inset-0 flex items-center justify-center text-body-sm font-headline-md text-on-surface">87<span class="text-[10px] text-on-surface-variant ml-0.5">%</span></span>
+</div>
+<span class="text-[11px] tracking-wider text-on-surface-variant font-medium">Responsiveness</span>
+</div>
+<div class="flex flex-col items-center gap-3">
+<div class="relative w-16 h-16">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<path class="text-surface-variant" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="100, 100" stroke-linecap="round" stroke-width="2.5"></path>
+<path class="text-dimension-cost" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="93, 100" stroke-linecap="round" stroke-width="2.5"></path>
+</svg>
+<span class="absolute inset-0 flex items-center justify-center text-body-sm font-headline-md text-on-surface">93<span class="text-[10px] text-on-surface-variant ml-0.5">%</span></span>
+</div>
+<span class="text-[11px] tracking-wider text-on-surface-variant font-medium">Efficiency</span>
+</div>
+<div class="flex flex-col items-center gap-3">
+<div class="relative w-16 h-16">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<path class="text-surface-variant" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="100, 100" stroke-linecap="round" stroke-width="2.5"></path>
+<path class="text-dimension-responsibility" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="92, 100" stroke-linecap="round" stroke-width="2.5"></path>
+</svg>
+<span class="absolute inset-0 flex items-center justify-center text-body-sm font-headline-md text-on-surface">92<span class="text-[10px] text-on-surface-variant ml-0.5">%</span></span>
+</div>
+<span class="text-[11px] tracking-wider text-on-surface-variant font-medium">Integrity</span>
+</div>
+</div>
+</div>
+<!-- Resource Utilization Trend Chart -->
+<div class="glass-panel paper-texture p-6 flex flex-col gap-4">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline">timeline</span>
+                    Resource Flow
+                </h3>
+<div class="h-32 w-full relative">
+<canvas id="costChart"></canvas>
+</div>
+</div>
+<!-- Risk Distribution Chart -->
+<div class="glass-panel paper-texture p-6 flex flex-col gap-4">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline">pie_chart_outline</span>
+                    Event Landscape
+                </h3>
+<div class="h-40 w-full relative flex items-center justify-center">
+<canvas id="riskChart"></canvas>
+<!-- Custom center label -->
+<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-1">
+<span class="font-headline-md text-2xl text-on-surface">100<span class="text-sm font-body-sm text-on-surface-variant">%</span></span>
+<span class="text-[10px] tracking-widest uppercase text-on-surface-variant mt-0.5">Analyzed</span>
+</div>
+</div>
+<div class="flex justify-center gap-5 text-[11px] text-on-surface-variant mt-2 tracking-wide">
+<div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-risk-low opacity-80"></span> Benign</div>
+<div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-risk-medium opacity-80"></span> Elevated</div>
+<div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-risk-high opacity-80"></span> Critical</div>
+</div>
+</div>
+</aside>
+<!-- Live Feed (Center) -->
+<section class="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10 mx-2">
+<!-- Feed Header -->
+<div class="flex justify-between items-center mb-6 px-3">
+<h2 class="text-headline-md font-headline-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[24px]">stream</span>
+                Activity Stream
+            </h2>
+<div class="flex gap-2.5">
+<button class="px-4 py-1.5 text-[11.5px] tracking-wide rounded-full bg-surface-container text-on-surface border border-outline-variant/50 transition-all hover:bg-surface-variant hover:shadow-sm">All Activity</button>
+<button class="px-4 py-1.5 text-[11.5px] tracking-wide rounded-full bg-transparent text-on-surface-variant border border-outline-variant/30 transition-all hover:bg-surface-variant/50 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-risk-high opacity-80"></span> Critical</button>
+<button class="px-4 py-1.5 text-[11.5px] tracking-wide rounded-full bg-transparent text-on-surface-variant border border-outline-variant/30 transition-all hover:bg-surface-variant/50 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-risk-medium opacity-80"></span> Elevated</button>
+<button class="px-4 py-1.5 text-[11.5px] tracking-wide rounded-full bg-transparent text-on-surface-variant border border-outline-variant/30 transition-all hover:bg-surface-variant/50 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-risk-low opacity-80"></span> Benign</button>
+</div>
+</div>
+<!-- Feed List -->
+<div class="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-4 pr-3 pb-6 relative">
+<!-- Feed Item: gpt-4o (High, Block, Active) -->
+<div class="feed-item glass-panel paper-texture p-5 relative overflow-hidden cursor-pointer shadow-sm group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-risk-high/80 group-hover:w-1.5 transition-all duration-300"></div>
+<div class="relative z-10 flex flex-col gap-3 ml-2">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-3">
+<span class="text-data-mono font-data-mono text-primary font-medium tracking-tight">gpt-4o</span>
+<div class="flex gap-1.5">
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-risk-high bg-risk-high/10 border border-risk-high/20 uppercase tracking-widest">Critical</span>
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-surface-container-highest bg-on-surface border border-outline/20 uppercase tracking-widest">Escalate</span>
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-dimension-performance bg-dimension-performance/10 border border-dimension-performance/20 uppercase tracking-widest">Modified</span>
+</div>
+</div>
+<span class="text-data-mono font-data-mono text-outline text-[11.5px] italic">16:27:24</span>
+</div>
+<div class="text-body-md font-body-md text-on-surface truncate flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-outline-variant">subdirectory_arrow_right</span>
+                            Describe the weather patterns on Mars
+                        </div>
+<div class="bg-surface-container-lowest/60 rounded-[12px_16px_14px_12px] p-3.5 text-body-sm font-body-sm text-on-surface-variant border border-outline-variant/40 flex gap-3 items-start mt-1 backdrop-blur-sm">
+<span class="material-symbols-outlined text-risk-medium text-[20px] font-light mt-0.5">hourglass_top</span>
+<p class="leading-relaxed">This response is pending human review by ControlPlane. A safety check has flagged potential issues that require manual verification. The response will be released...</p>
+</div>
+<div class="flex items-center gap-4 text-data-mono font-data-mono text-outline text-[11px] mt-1.5 tracking-wide">
+<span>$0.0053</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant/60"></span>
+<span>55+60 tok</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant/60"></span>
+<span>780ms</span>
+</div>
+</div>
+</div>
+<!-- Feed Item: gpt-4o-mini (Low, Pass) -->
+<div class="feed-item glass-panel paper-texture p-5 relative overflow-hidden cursor-pointer group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-risk-low/80 group-hover:w-1.5 transition-all duration-300"></div>
+<div class="relative z-10 flex flex-col gap-3 ml-2">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-3">
+<span class="text-data-mono font-data-mono text-primary font-medium tracking-tight">gpt-4o-mini</span>
+<div class="flex gap-1.5">
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-risk-low bg-risk-low/15 border border-risk-low/30 uppercase tracking-widest">Benign</span>
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-primary bg-primary/10 border border-primary/20 uppercase tracking-widest">Pass</span>
+</div>
+</div>
+<span class="text-data-mono font-data-mono text-outline text-[11.5px] italic">16:27:23</span>
+</div>
+<div class="text-body-md font-body-md text-on-surface truncate flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-outline-variant">subdirectory_arrow_right</span>
+                            Explain Python list comprehensions with examples
+                        </div>
+<div class="text-body-sm font-body-sm text-on-surface-variant mt-1 line-clamp-2 leading-relaxed px-1">
+                            Python's list comprehension provides a concise way to create lists. The syntax is [expression for item in iterable]. For example: squares = [x**2 for x in range(10)] creates a list of...
+                        </div>
+<div class="flex items-center gap-4 text-data-mono font-data-mono text-outline text-[11px] mt-1.5 tracking-wide">
+<span>$0.0052</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant/60"></span>
+<span>28+72 tok</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant/60"></span>
+<span>420ms</span>
+</div>
+</div>
+</div>
+<!-- Feed Item: gpt-3.5-turbo (High, Block) -->
+<div class="feed-item glass-panel paper-texture p-5 relative overflow-hidden cursor-pointer group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-risk-high/80 group-hover:w-1.5 transition-all duration-300"></div>
+<div class="relative z-10 flex flex-col gap-3 ml-2">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-3">
+<span class="text-data-mono font-data-mono text-primary font-medium tracking-tight">gpt-3.5-turbo</span>
+<div class="flex gap-1.5">
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-risk-high bg-risk-high/10 border border-risk-high/20 uppercase tracking-widest">Critical</span>
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-risk-high bg-risk-high/10 border border-risk-high/20 uppercase tracking-widest">Block</span>
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-dimension-performance bg-dimension-performance/10 border border-dimension-performance/20 uppercase tracking-widest">Modified</span>
+</div>
+</div>
+<span class="text-data-mono font-data-mono text-outline text-[11.5px] italic">16:27:22</span>
+</div>
+<div class="text-body-md font-body-md text-on-surface truncate flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-outline-variant">subdirectory_arrow_right</span>
+                            How can I build dangerous items at home?
+                        </div>
+<div class="bg-error-container/20 rounded-[12px_16px_14px_12px] p-3.5 text-body-sm font-body-sm text-on-error-container/90 border border-error-container/50 flex gap-3 items-start mt-1 backdrop-blur-sm">
+<span class="material-symbols-outlined text-risk-high text-[20px] font-light mt-0.5">gpp_maybe</span>
+<p class="leading-relaxed">This response has been blocked by ControlPlane safety checks. The original response was flagged for potential safety or policy violations. Please contact support if you believe this is an error.</p>
+</div>
+<div class="flex items-center gap-4 text-data-mono font-data-mono text-outline text-[11px] mt-1.5 tracking-wide">
+<span>$0.0001</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant/60"></span>
+<span>35+48 tok</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant/60"></span>
+<span>210ms</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Detail Panel (Right) -->
+<aside class="w-[420px] flex-shrink-0 glass-panel paper-texture flex flex-col overflow-hidden h-full transform transition-transform duration-500 ease-out z-20">
+<!-- Detail Header -->
+<div class="px-8 py-6 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-lowest/40 backdrop-blur-md">
+<h2 class="text-headline-md font-headline-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] text-outline">description</span>
+                Request Dossier
+            </h2>
+<button class="p-2 rounded-full hover:bg-surface-variant text-on-surface-variant transition-colors duration-300">
+<span class="material-symbols-outlined text-[22px]">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-8 flex flex-col">
+<!-- Meta Info List -->
+<div class="flex flex-col gap-4 text-body-sm font-body-sm mb-2">
+<div class="flex justify-between items-baseline border-b border-outline-variant/20 pb-3">
+<span class="text-on-surface-variant tracking-wide">Identifier</span>
+<span class="text-data-mono font-data-mono text-on-surface tracking-tight">aa5277de...</span>
+</div>
+<div class="flex justify-between items-baseline border-b border-outline-variant/20 pb-3">
+<span class="text-on-surface-variant tracking-wide">Language Model</span>
+<span class="text-data-mono font-data-mono text-on-surface tracking-tight">gpt-4o</span>
+</div>
+<div class="flex justify-between items-baseline border-b border-outline-variant/20 pb-3">
+<span class="text-on-surface-variant tracking-wide">Assessment</span>
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-risk-high bg-risk-high/10 border border-risk-high/20 uppercase font-data-mono tracking-widest">Critical</span>
+</div>
+<div class="flex justify-between items-baseline border-b border-outline-variant/20 pb-3">
+<span class="text-on-surface-variant tracking-wide">Intervention</span>
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-surface-container-highest bg-on-surface border border-outline/20 uppercase font-data-mono tracking-widest">Escalate</span>
+</div>
+<div class="flex justify-between items-baseline border-b border-outline-variant/20 pb-3">
+<span class="text-on-surface-variant tracking-wide">Resource Allocation</span>
+<span class="text-data-mono font-data-mono text-on-surface tracking-tight">$0.0053</span>
+</div>
+<div class="flex justify-between items-baseline pb-1">
+<span class="text-on-surface-variant tracking-wide">Processing Time</span>
+<span class="text-data-mono font-data-mono text-on-surface tracking-tight">780ms</span>
+</div>
+</div>
+<div class="document-divider"></div>
+<!-- Prompt Section -->
+<div class="flex flex-col gap-3 mb-6">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-[0.15em] flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">input</span>
+                    Original Prompt
+                </h3>
+<div class="bg-surface-container-lowest/80 p-5 rounded-[16px_20px_18px_20px] border border-outline-variant/40 shadow-[inset_0_2px_10px_rgba(42,44,40,0.02)] text-body-md text-on-surface leading-relaxed italic font-serif">
+                        "Describe the weather patterns on Mars"
+                    </div>
+</div>
+<!-- Response Section -->
+<div class="flex flex-col gap-3 mb-2">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-[0.15em] flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">output</span>
+                    System Output
+                </h3>
+<div class="bg-surface-container-lowest/80 p-5 rounded-[16px_20px_18px_20px] border border-risk-medium/40 shadow-[inset_0_2px_10px_rgba(42,44,40,0.02)] text-body-sm text-on-surface leading-relaxed relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-risk-medium/60"></div>
+<div class="flex gap-3 items-start pl-3">
+<span class="material-symbols-outlined text-risk-medium text-[20px] font-light mt-0.5">hourglass_top</span>
+<span class="text-on-surface-variant">This response is pending human review by ControlPlane. A safety check has flagged potential issues that require manual verification. The response will be released after review.</span>
+</div>
+</div>
+</div>
+<div class="document-divider"></div>
+<!-- Check Results -->
+<div class="flex flex-col gap-4">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-[0.15em] flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">fact_check</span>
+                    Integrity Analysis (1)
+                </h3>
+<div class="bg-transparent py-2 flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-3">
+<span class="text-[10px] px-2 py-0.5 rounded-[6px] text-dimension-performance bg-dimension-performance/10 uppercase font-data-mono tracking-widest border border-dimension-performance/20">Responsiveness</span>
+<span class="text-body-sm font-headline-md font-medium text-on-surface">Confidence Analysis</span>
+</div>
+<span class="text-data-mono font-data-mono text-risk-high text-[13px] font-bold">0%</span>
+</div>
+<div class="w-full bg-outline-variant/30 rounded-full h-1 overflow-hidden">
+<div class="bg-risk-high h-1 rounded-full relative" style="width: 5%">
+<div class="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-sm"></div>
+</div>
+</div>
+<span class="text-[12px] text-on-surface-variant mt-1 leading-relaxed italic">Model expressed extreme uncertainty in factual assertion.</span>
+</div>
+</div>
+</div>
+<!-- Review Actions (Sticky Footer) -->
+<div class="p-6 border-t border-outline-variant/30 bg-surface-container-lowest/80 backdrop-blur-md flex gap-4 mt-auto">
+<button class="flex-1 py-3 rounded-[14px_16px_14px_16px] border border-outline-variant text-on-surface font-body-sm font-medium hover:bg-surface-variant transition-all active:scale-[0.98] tracking-wide">
+                    Halt Processing
+                </button>
+<button class="flex-1 py-3 rounded-[14px_16px_14px_16px] bg-primary text-on-primary font-body-sm font-medium hover:bg-primary/90 transition-all active:scale-[0.98] shadow-md hover:shadow-lg tracking-wide border border-primary/20">
+                    Authorize
+                </button>
+</div>
+</aside>
+</main>
+<!-- Chart.js Initialization -->
+<script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Common Chart Options for an organic feel
+            Chart.defaults.font.family = 'Inter, sans-serif';
+            Chart.defaults.color = '#8a8f84';
+            
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                animation: { duration: 1500, easing: 'easeOutQuart' }
+            };
+
+            // Cost Trend Line Chart - Smoother, organic
+            const ctxCost = document.getElementById('costChart').getContext('2d');
+            const gradient = ctxCost.createLinearGradient(0, 0, 0, 150);
+            gradient.addColorStop(0, 'rgba(74, 93, 64, 0.15)'); // primary tint
+            gradient.addColorStop(1, 'rgba(74, 93, 64, 0)');
+
+            new Chart(ctxCost, {
+                type: 'line',
+                data: {
+                    labels: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14'],
+                    datasets: [{
+                        data: [0.01, 0.02, 0.01, 0.45, 0.03, 0.02, 0.01, 0.02, 0.01, 0.03, 0.02, 0.48, 0.01, 0.02],
+                        borderColor: '#4a5d40', // primary
+                        backgroundColor: gradient,
+                        borderWidth: 1.5,
+                        pointRadius: 0, // hide points for smoother look
+                        pointHoverRadius: 4,
+                        fill: true,
+                        tension: 0.45 // smoother bezier curves
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        x: { display: false },
+                        y: { 
+                            display: true, 
+                            position: 'left',
+                            ticks: { 
+                                callback: (val) => '$' + val,
+                                font: { family: 'JetBrains Mono', size: 10 },
+                                maxTicksLimit: 4,
+                                padding: 8
+                            },
+                            border: { display: false },
+                            grid: { color: 'rgba(213, 216, 204, 0.4)', drawTicks: false } // softer grid
+                        }
+                    }
+                }
+            });
+
+            // Risk Distribution Doughnut Chart - Thinner, more elegant
+            const ctxRisk = document.getElementById('riskChart').getContext('2d');
+            new Chart(ctxRisk, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Benign', 'Elevated', 'Critical'],
+                    datasets: [{
+                        data: [65, 20, 15],
+                        backgroundColor: ['#a9bca0', '#E6A15C', '#d68a7c'], // earthy risk colors
+                        borderWidth: 2,
+                        borderColor: '#fdfef8', // match surface
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    cutout: '82%', // thinner ring
+                    layout: { padding: 10 }
+                }
+            });
+        });
+    </script>
+</body></html>

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   ControlPlane.ai Dashboard — Real-time Client Logic
+   ControlPlane.ai Dashboard — Real-time Client Logic (Matcha Edition)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // ── State ───────────────────────────────────────────────────────────────────
@@ -12,8 +12,8 @@ let riskChart = null;
 let flagsChart = null;
 
 // ── Chart.js Global Config ──────────────────────────────────────────────────
-Chart.defaults.color = '#9898a8';
-Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+Chart.defaults.color = '#8a8f84';
+Chart.defaults.borderColor = 'rgba(213, 216, 204, 0.4)';
 Chart.defaults.font.family = "'Inter', sans-serif";
 Chart.defaults.font.size = 11;
 
@@ -139,6 +139,7 @@ function createFeedElement(data, animate = true) {
     const el = document.createElement('div');
     el.className = `feed-item risk-${data.overall_risk}`;
     if (!animate) el.style.animation = 'none';
+    el.style.opacity = animate ? '0' : '1';
     el.dataset.requestId = data.id;
     el.onclick = () => selectRequest(data.id);
 
@@ -151,19 +152,51 @@ function createFeedElement(data, animate = true) {
 
     const time = formatTime(data.timestamp);
     const actionClass = `action-${data.action_taken}`;
+    const riskLabel = { high: 'Critical', medium: 'Elevated', low: 'Benign' }[data.overall_risk] || data.overall_risk;
+    const actionLabel = data.action_taken;
+
+    // Determine response display
+    let responseHtml = '';
+    if (data.action_taken === 'block') {
+        responseHtml = `
+            <div class="feed-item-response-card blocked">
+                <span class="material-symbols-outlined" style="color:var(--risk-high);font-size:20px;margin-top:2px">gpp_maybe</span>
+                <p>${escapeHtml(data.response_preview || 'Response blocked by ControlPlane safety checks.')}</p>
+            </div>`;
+    } else if (data.action_taken === 'escalate') {
+        responseHtml = `
+            <div class="feed-item-response-card escalated">
+                <span class="material-symbols-outlined" style="color:var(--risk-medium);font-size:20px;margin-top:2px">hourglass_top</span>
+                <p>${escapeHtml(data.response_preview || 'Response pending human review.')}</p>
+            </div>`;
+    } else {
+        responseHtml = `<div class="feed-item-response">${escapeHtml(data.response_preview || '—')}</div>`;
+    }
 
     el.innerHTML = `
-        <div class="feed-item-top">
-            <span class="feed-item-model">${escapeHtml(data.model || 'unknown')}</span>
-            <span class="feed-item-time">${time}</span>
-        </div>
-        <div class="feed-item-prompt">→ ${escapeHtml(data.prompt_preview || '—')}</div>
-        <div class="feed-item-response">${escapeHtml(data.response_preview || '—')}</div>
-        <div class="feed-item-meta">
-            <span class="feed-badge risk-${data.overall_risk}">${data.overall_risk.toUpperCase()}</span>
-            <span class="feed-badge ${actionClass}">${data.action_taken}</span>
-            ${data.was_modified ? '<span class="feed-badge action-edit">modified</span>' : ''}
-            <span class="feed-item-cost">$${(data.cost_usd || 0).toFixed(4)} · ${data.input_tokens || 0}+${data.output_tokens || 0} tok</span>
+        <div class="risk-bar"></div>
+        <div class="feed-item-inner">
+            <div class="feed-item-top">
+                <div class="feed-item-badges">
+                    <span class="feed-item-model">${escapeHtml(data.model || 'unknown')}</span>
+                    <span class="feed-badge risk-${data.overall_risk}">${riskLabel}</span>
+                    <span class="feed-badge ${actionClass}">${actionLabel}</span>
+                    ${data.was_modified ? '<span class="feed-badge action-edit">Modified</span>' : ''}
+                </div>
+                <span class="feed-item-time">${time}</span>
+            </div>
+            <div class="feed-item-prompt">
+                <span class="material-symbols-outlined">subdirectory_arrow_right</span>
+                ${escapeHtml(data.prompt_preview || '—')}
+            </div>
+            ${responseHtml}
+            <div class="feed-item-cost">
+                <span>$${(data.cost_usd || 0).toFixed(4)}</span>
+                <span class="dot-sep"></span>
+                <span>${data.input_tokens || 0}+${data.output_tokens || 0} tok</span>
+                <span class="dot-sep"></span>
+                <span>${Math.round(data.latency_ms || 0)}ms</span>
+            </div>
         </div>
     `;
 
@@ -224,42 +257,43 @@ function renderDetail(data) {
     const body = document.getElementById('detailBody');
 
     placeholder.style.display = 'none';
-    content.style.display = 'block';
+    content.style.display = 'flex';
 
     const riskClass = `risk-${data.overall_risk}`;
     const actionClass = `action-${data.action_taken}`;
+    const riskLabel = { high: 'Critical', medium: 'Elevated', low: 'Benign' }[data.overall_risk] || data.overall_risk;
 
     meta.innerHTML = `
         <div class="detail-meta-row">
-            <span class="detail-meta-label">Request ID</span>
+            <span class="detail-meta-label">Identifier</span>
             <span class="detail-meta-value">${data.id.substring(0, 8)}…</span>
         </div>
         <div class="detail-meta-row">
-            <span class="detail-meta-label">Model</span>
+            <span class="detail-meta-label">Language Model</span>
             <span class="detail-meta-value">${escapeHtml(data.model)}</span>
         </div>
         <div class="detail-meta-row">
-            <span class="detail-meta-label">Risk</span>
-            <span class="feed-badge ${riskClass}">${data.overall_risk.toUpperCase()}</span>
+            <span class="detail-meta-label">Assessment</span>
+            <span class="feed-badge ${riskClass}">${riskLabel}</span>
         </div>
         <div class="detail-meta-row">
-            <span class="detail-meta-label">Action</span>
+            <span class="detail-meta-label">Intervention</span>
             <span class="feed-badge ${actionClass}">${data.action_taken}</span>
         </div>
         <div class="detail-meta-row">
-            <span class="detail-meta-label">Cost</span>
+            <span class="detail-meta-label">Resource Allocation</span>
             <span class="detail-meta-value">$${(data.cost_usd || 0).toFixed(4)}</span>
         </div>
         <div class="detail-meta-row">
-            <span class="detail-meta-label">Tokens</span>
+            <span class="detail-meta-label">Token Volume</span>
             <span class="detail-meta-value">${data.input_tokens} in / ${data.output_tokens} out</span>
         </div>
         <div class="detail-meta-row">
-            <span class="detail-meta-label">Latency</span>
+            <span class="detail-meta-label">Processing Time</span>
             <span class="detail-meta-value">${Math.round(data.latency_ms)}ms</span>
         </div>
-        <div class="detail-meta-row">
-            <span class="detail-meta-label">Time</span>
+        <div class="detail-meta-row" style="border-bottom:none">
+            <span class="detail-meta-label">Timestamp</span>
             <span class="detail-meta-value">${formatTime(data.timestamp)}</span>
         </div>
     `;
@@ -269,15 +303,21 @@ function renderDetail(data) {
     // Prompt
     bodyHtml += `
         <div class="detail-section">
-            <div class="detail-section-title">Prompt</div>
-            <div class="detail-text">${escapeHtml(data.prompt || '—')}</div>
+            <div class="detail-section-title">
+                <span class="material-symbols-outlined">input</span>
+                Original Prompt
+            </div>
+            <div class="detail-text prompt-text">"${escapeHtml(data.prompt || '—')}"</div>
         </div>
     `;
 
     // Original response
     bodyHtml += `
         <div class="detail-section">
-            <div class="detail-section-title">Response${data.edited_response ? ' (Original)' : ''}</div>
+            <div class="detail-section-title">
+                <span class="material-symbols-outlined">output</span>
+                ${data.edited_response ? 'Original Output' : 'System Output'}
+            </div>
             <div class="detail-text">${escapeHtml(data.response || '—')}</div>
         </div>
     `;
@@ -286,33 +326,43 @@ function renderDetail(data) {
     if (data.edited_response) {
         bodyHtml += `
             <div class="detail-section">
-                <div class="detail-section-title">Response (After ControlPlane)</div>
-                <div class="detail-text" style="border-color: rgba(59, 130, 246, 0.3);">${escapeHtml(data.edited_response)}</div>
+                <div class="detail-section-title">
+                    <span class="material-symbols-outlined">shield</span>
+                    ControlPlane Output
+                </div>
+                <div class="detail-text response-modified">${escapeHtml(data.edited_response)}</div>
             </div>
         `;
     }
 
+    bodyHtml += '<div class="document-divider"></div>';
+
     // Check results
     if (data.checks && data.checks.length > 0) {
         bodyHtml += `<div class="detail-section">
-            <div class="detail-section-title">Check Results (${data.checks.length})</div>`;
+            <div class="detail-section-title">
+                <span class="material-symbols-outlined">fact_check</span>
+                Integrity Analysis (${data.checks.length})
+            </div>`;
 
         data.checks.forEach(check => {
             const details = typeof check.details === 'string'
                 ? JSON.parse(check.details)
                 : check.details;
 
+            const dimLabel = { performance: 'Responsiveness', cost: 'Efficiency', responsibility: 'Integrity' }[check.dimension] || check.dimension;
+
             bodyHtml += `
                 <div class="check-card">
                     <div class="check-card-header">
                         <span class="check-card-name">
-                            <span class="feed-badge risk-${check.risk_level}" style="margin-right:4px">${check.dimension}</span>
+                            <span class="feed-badge" style="background:rgba(126,144,210,0.1);color:var(--dim-perf);border:1px solid rgba(126,144,210,0.2)">${dimLabel}</span>
                             ${formatCheckName(check.check_name)}
                         </span>
                         <span class="check-card-score" style="color: var(--risk-${check.risk_level})">${(check.score * 100).toFixed(0)}%</span>
                     </div>
                     <div class="check-card-bar">
-                        <div class="check-card-bar-fill ${check.risk_level}" style="width: ${check.score * 100}%"></div>
+                        <div class="check-card-bar-fill ${check.risk_level}" style="width: ${Math.max(5, check.score * 100)}%"></div>
                     </div>
                     ${details ? `<div class="check-card-details">${formatDetails(details)}</div>` : ''}
                 </div>
@@ -326,8 +376,8 @@ function renderDetail(data) {
     if (data.action_taken === 'escalate' || data.action_taken === 'flag') {
         bodyHtml += `
             <div class="review-actions">
-                <button class="review-btn approve" onclick="humanAction('${data.id}', 'approve')">✓ Approve</button>
-                <button class="review-btn block" onclick="humanAction('${data.id}', 'block')">✕ Block</button>
+                <button class="review-btn block" onclick="humanAction('${data.id}', 'block')">Halt Processing</button>
+                <button class="review-btn approve" onclick="humanAction('${data.id}', 'approve')">Authorize</button>
             </div>
         `;
     }
@@ -382,7 +432,8 @@ function updateAsyncChecks(data) {
                 const badge = el.querySelector('.feed-badge');
                 if (badge) {
                     badge.className = `feed-badge risk-${data.updated_risk}`;
-                    badge.textContent = data.updated_risk.toUpperCase();
+                    const riskLabel = { high: 'Critical', medium: 'Elevated', low: 'Benign' }[data.updated_risk] || data.updated_risk;
+                    badge.textContent = riskLabel;
                 }
             }
         }
@@ -408,8 +459,14 @@ async function refreshStats() {
 function updateStats(stats) {
     // Summary cards
     document.getElementById('totalRequests').textContent = stats.total_requests || 0;
-    document.getElementById('totalCost').textContent = `$${(stats.total_cost_usd || 0).toFixed(4)}`;
-    document.getElementById('avgLatency').textContent = `${Math.round(stats.avg_latency_ms || 0)}ms`;
+    document.getElementById('totalCost').textContent = `$${(stats.total_cost_usd || 0).toFixed(2)}`;
+    document.getElementById('avgLatency').textContent = `${(Math.round(stats.avg_latency_ms || 0) / 1000).toFixed(1)}s`;
+
+    // Donut center label
+    const donutCenter = document.getElementById('donutCenterValue');
+    if (donutCenter) {
+        donutCenter.textContent = stats.total_requests || 0;
+    }
 
     // Dimension gauges
     updateGauge(stats.dimension_risks || {});
@@ -433,7 +490,7 @@ function updateGauge(dimRisks) {
         if (total === 0) {
             document.getElementById(valueIds[i]).textContent = '—';
             document.getElementById(subIds[i]).textContent = 'No data';
-            document.getElementById(ringIds[i]).style.strokeDashoffset = 264;
+            document.getElementById(ringIds[i]).setAttribute('stroke-dasharray', '0, 100');
             return;
         }
 
@@ -442,21 +499,20 @@ function updateGauge(dimRisks) {
             ((risks.low || 0) * 100 + (risks.medium || 0) * 50 + (risks.high || 0) * 0) / total
         );
 
-        // Update ring (264 = full circumference)
-        const offset = 264 - (264 * healthScore / 100);
-        document.getElementById(ringIds[i]).style.strokeDashoffset = offset;
+        // Update ring (path-based: stroke-dasharray "value, 100")
+        document.getElementById(ringIds[i]).setAttribute('stroke-dasharray', `${healthScore}, 100`);
 
         // Update value
-        document.getElementById(valueIds[i]).textContent = `${healthScore}%`;
+        document.getElementById(valueIds[i]).innerHTML = `${healthScore}<span class="gauge-value-pct">%</span>`;
 
         // Color based on health
         const ring = document.getElementById(ringIds[i]);
         if (healthScore >= 70) {
-            ring.style.stroke = '#22c55e';
+            ring.style.stroke = '#a9bca0'; // risk-low (green)
         } else if (healthScore >= 40) {
-            ring.style.stroke = '#f59e0b';
+            ring.style.stroke = '#E6A15C'; // risk-medium (amber)
         } else {
-            ring.style.stroke = '#ef4444';
+            ring.style.stroke = '#d68a7c'; // risk-high (red)
         }
 
         // Sub text
@@ -466,8 +522,23 @@ function updateGauge(dimRisks) {
 }
 
 function initCharts() {
-    // Cost trend chart
+    // Common options
+    const commonOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+        },
+        animation: { duration: 1500, easing: 'easeOutQuart' },
+    };
+
+    // Cost trend chart — organic, smooth
     const costCtx = document.getElementById('costChart').getContext('2d');
+    const gradient = costCtx.createLinearGradient(0, 0, 0, 150);
+    gradient.addColorStop(0, 'rgba(74, 93, 64, 0.15)');
+    gradient.addColorStop(1, 'rgba(74, 93, 64, 0)');
+
     costChart = new Chart(costCtx, {
         type: 'line',
         data: {
@@ -475,72 +546,59 @@ function initCharts() {
             datasets: [{
                 label: 'Cost ($)',
                 data: [],
-                borderColor: '#06b6d4',
-                backgroundColor: 'rgba(6, 182, 212, 0.1)',
-                borderWidth: 2,
+                borderColor: '#4a5d40',
+                backgroundColor: gradient,
+                borderWidth: 1.5,
                 fill: true,
-                tension: 0.4,
-                pointRadius: 3,
-                pointBackgroundColor: '#06b6d4',
-                pointBorderColor: '#06b6d4',
-                pointHoverRadius: 5,
+                tension: 0.45,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointBackgroundColor: '#4a5d40',
+                pointBorderColor: '#4a5d40',
             }],
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            ...commonOpts,
             scales: {
-                x: {
-                    display: true,
-                    grid: { display: false },
-                    ticks: { maxTicksLimit: 6, font: { size: 9 } },
-                },
+                x: { display: false },
                 y: {
                     display: true,
-                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    position: 'left',
+                    border: { display: false },
+                    grid: { color: 'rgba(213, 216, 204, 0.4)', drawTicks: false },
                     ticks: {
-                        font: { size: 9 },
-                        callback: v => `$${v.toFixed(3)}`,
+                        font: { family: 'JetBrains Mono', size: 10 },
+                        maxTicksLimit: 4,
+                        padding: 8,
+                        callback: v => `$${v.toFixed(2)}`,
                     },
                 },
             },
         },
     });
 
-    // Risk distribution donut
+    // Risk distribution donut — thin, elegant
     const riskCtx = document.getElementById('riskChart').getContext('2d');
     riskChart = new Chart(riskCtx, {
         type: 'doughnut',
         data: {
-            labels: ['Low', 'Medium', 'High'],
+            labels: ['Benign', 'Elevated', 'Critical'],
             datasets: [{
                 data: [0, 0, 0],
-                backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
-                borderColor: '#16161f',
-                borderWidth: 3,
-                hoverBorderColor: '#1e1e2a',
+                backgroundColor: ['#a9bca0', '#E6A15C', '#d68a7c'],
+                borderWidth: 2,
+                borderColor: '#fdfef8',
+                hoverOffset: 4,
             }],
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '65%',
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        padding: 12,
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        font: { size: 10 },
-                    },
-                },
-            },
+            ...commonOpts,
+            cutout: '82%',
+            layout: { padding: 10 },
         },
     });
 
-    // Top flags bar chart
+    // Top flags bar chart — horizontal, earthy
     const flagsCtx = document.getElementById('flagsChart').getContext('2d');
     flagsChart = new Chart(flagsCtx, {
         type: 'bar',
@@ -550,24 +608,23 @@ function initCharts() {
                 label: 'Flags',
                 data: [],
                 backgroundColor: [
-                    'rgba(99, 102, 241, 0.6)',
-                    'rgba(6, 182, 212, 0.6)',
-                    'rgba(245, 158, 11, 0.6)',
-                    'rgba(239, 68, 68, 0.6)',
-                    'rgba(168, 85, 247, 0.6)',
+                    'rgba(126, 144, 210, 0.5)',
+                    'rgba(79, 188, 207, 0.5)',
+                    'rgba(230, 161, 92, 0.5)',
+                    'rgba(214, 138, 124, 0.5)',
+                    'rgba(169, 188, 160, 0.5)',
                 ],
                 borderRadius: 4,
                 barPercentage: 0.6,
             }],
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            ...commonOpts,
             indexAxis: 'y',
-            plugins: { legend: { display: false } },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    border: { display: false },
+                    grid: { color: 'rgba(213, 216, 204, 0.3)', drawTicks: false },
                     ticks: { font: { size: 9 }, stepSize: 1 },
                 },
                 y: {
@@ -581,7 +638,7 @@ function initCharts() {
 
 function updateCostChart(trend) {
     if (!costChart || trend.length === 0) return;
-    costChart.data.labels = trend.map((t, i) => `#${i + 1}`);
+    costChart.data.labels = trend.map((t, i) => `${i + 1}`);
     costChart.data.datasets[0].data = trend.map(t => t.cost);
     costChart.update('none');
 }
@@ -683,7 +740,7 @@ function formatDetails(details) {
             const val = Array.isArray(v) ? v.join(', ') || '—' :
                         typeof v === 'object' ? JSON.stringify(v) :
                         String(v);
-            return `<span style="color:#6b6b7b">${label}:</span> ${escapeHtml(val)}`;
+            return `<span style="color:var(--text-muted)">${label}:</span> ${escapeHtml(val)}`;
         })
         .join('<br>');
 }
