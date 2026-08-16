@@ -1,6 +1,11 @@
 """
 ControlPlane Proxy — The API gateway that intercepts AI traffic.
 
+2-Gate Architecture:
+  Gate 1 (Pre-Inference):  Cache → PII Redaction → Jailbreak Filter
+  LLM Call:                Forward sanitized prompt to mock/live LLM
+  Gate 2 (Post-Inference): Sync checks → Policy → Log → Async deep checks
+
 Accepts OpenAI-compatible /v1/chat/completions requests.
 In mock mode, returns simulated responses without needing an API key.
 In live mode, proxies to the real LLM provider.
@@ -17,6 +22,7 @@ import httpx
 
 from . import config, database, policy
 from .checkers import cost as cost_checker
+from .checkers import gate1
 from .checkers import performance as perf_checker
 from .checkers import responsibility as resp_checker
 
@@ -226,13 +232,21 @@ def _get_mock_response(prompt: str) -> dict:
 
 async def handle_chat_completion(request_body: dict) -> dict:
     """
-    Process a chat completion request through the full ControlPlane pipeline:
-      1. Get response (mock or live)
-      2. Run sync guardrails
-      3. Apply policy (pass / edit / block / escalate)
-      4. Log everything
-      5. Run async deep checks in background
-      6. Return response to caller
+    Process a chat completion request through the 2-Gate ControlPlane pipeline:
+
+      GATE 1 — Pre-Inference (ultra-fast, before LLM call):
+        1a. Normalized cache lookup → return cached if hit
+        1b. Jailbreak filter → block immediately if matched
+        1c. PII redaction on INPUT prompt → sanitize before forwarding
+
+      LLM CALL — Forward sanitized prompt to mock/live provider
+
+      GATE 2 — Post-Inference (existing checks on LLM output):
+        2a. Run sync guardrails (toxicity, PII in output, confidence, etc.)
+        2b. Apply policy (pass / edit / block / escalate)
+        2c. Log everything to SQLite
+        2d. Run async deep checks in background (hallucination, bias, waste)
+        2e. Broadcast SSE event
     """
     request_id = str(uuid.uuid4())
     start_time = time.time()
@@ -244,27 +258,71 @@ async def handle_chat_completion(request_body: dict) -> dict:
         prompt_text = messages[-1].get("content", "")
     model = request_body.get("model", config.LLM_DEFAULT_MODEL)
 
-    # ── Step 1: Get the LLM response ─────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════
+    #  GATE 1 — PRE-INFERENCE INTERCEPTOR
+    # ═══════════════════════════════════════════════════════════════════════
+
+    gate1_checks = []
+
+    # ── 1a. Normalized String Cache ──────────────────────────────────────
+    cached = gate1.check_cache(prompt_text)
+    cache_check = gate1.make_cache_check_result(was_hit=cached is not None)
+    gate1_checks.append(cache_check)
+
+    if cached is not None:
+        # CACHE HIT — return immediately, $0 cost, no LLM call
+        print(f"[Gate1] Cache HIT for prompt: {prompt_text[:50]}...")
+        return await _handle_cache_hit(request_id, prompt_text, model, cached, gate1_checks)
+
+    # ── 1b. Jailbreak Filter ─────────────────────────────────────────────
+    jailbreak_check = gate1.check_jailbreak(prompt_text)
+    gate1_checks.append(jailbreak_check)
+
+    if jailbreak_check["risk_level"] == "high":
+        # JAILBREAK DETECTED — block immediately, no LLM call
+        print(f"[Gate1] JAILBREAK blocked: {prompt_text[:50]}...")
+        return await _handle_jailbreak_block(request_id, prompt_text, model, start_time, gate1_checks)
+
+    # ── 1c. PII Redaction on Input ───────────────────────────────────────
+    sanitized_prompt, pii_input_check = gate1.redact_pii_in_prompt(prompt_text)
+    gate1_checks.append(pii_input_check)
+
+    if sanitized_prompt != prompt_text:
+        print(f"[Gate1] PII redacted from prompt: {pii_input_check['details']['pii_types']}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    #  LLM CALL — Forward sanitized prompt
+    # ═══════════════════════════════════════════════════════════════════════
+
     if config.MODE == "live" and config.LLM_API_KEY:
-        response_data = await _call_live_llm(request_body)
+        # In live mode, swap the prompt in the request body
+        live_body = _replace_prompt_in_body(request_body, sanitized_prompt)
+        response_data = await _call_live_llm(live_body)
     else:
+        # Mock mode uses the ORIGINAL prompt for keyword matching,
+        # but we record that the sanitized version was sent
         response_data = _get_mock_response(prompt_text)
 
     response_text = response_data["content"]
     response_model = response_data.get("model", model)
-    input_tokens = response_data.get("input_tokens", cost_checker.count_tokens_approx(prompt_text, model))
+    input_tokens = response_data.get("input_tokens", cost_checker.count_tokens_approx(sanitized_prompt, model))
     output_tokens = response_data.get("output_tokens", cost_checker.count_tokens_approx(response_text, model))
     latency_ms = response_data.get("latency_ms", (time.time() - start_time) * 1000)
 
-    # ── Step 2: Run SYNC guardrails ──────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════
+    #  GATE 2 — POST-INFERENCE CHECKS (existing flow)
+    # ═══════════════════════════════════════════════════════════════════════
+
     cost_usd = cost_checker.estimate_cost(input_tokens, output_tokens, response_model)
 
     sync_checks = []
+    # Include Gate 1 checks in the sync results so they're visible in the dashboard
+    sync_checks.extend(gate1_checks)
     sync_checks.extend(perf_checker.run_sync_checks(response_text, prompt_text))
     sync_checks.extend(cost_checker.run_sync_checks(input_tokens, output_tokens, cost_usd))
     sync_checks.extend(resp_checker.run_sync_checks(response_text))
 
-    # ── Step 3: Apply policy ─────────────────────────────────────────────
+    # ── Apply policy ─────────────────────────────────────────────────────
     policy_decision = policy.determine_action(sync_checks)
     action_result = policy.apply_action(
         policy_decision["action"], response_text, sync_checks
@@ -274,7 +332,7 @@ async def handle_chat_completion(request_body: dict) -> dict:
     action_taken = policy_decision["action"]
     overall_risk = policy_decision["overall_risk"]
 
-    # ── Step 4: Log to database ──────────────────────────────────────────
+    # ── Log to database ──────────────────────────────────────────────────
     request_record = {
         "id": request_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -294,24 +352,27 @@ async def handle_chat_completion(request_body: dict) -> dict:
                 "action": policy_decision["action"],
                 "all_risks": policy_decision["all_risks"],
             },
+            "gate1": {
+                "prompt_sanitized": sanitized_prompt != prompt_text,
+                "pii_types_redacted": pii_input_check["details"].get("pii_types", []),
+            },
         },
     }
 
     database.insert_request(request_record)
 
-    # Store sync check results
+    # Store check results
     for check in sync_checks:
         check["request_id"] = request_id
-        # Remove internal fields
         check_copy = {k: v for k, v in check.items() if not k.startswith("_")}
         database.insert_check_result(check_copy)
 
-    # ── Step 5: Queue async deep checks (non-blocking) ───────────────────
+    # ── Queue async deep checks (non-blocking) ───────────────────────────
     asyncio.create_task(
         _run_async_checks(request_id, response_text, prompt_text, input_tokens, cost_usd)
     )
 
-    # ── Step 6: Broadcast SSE event ──────────────────────────────────────
+    # ── Broadcast SSE event ──────────────────────────────────────────────
     await _broadcast_sse("new_request", {
         "id": request_id,
         "timestamp": request_record["timestamp"],
@@ -336,6 +397,16 @@ async def handle_chat_completion(request_body: dict) -> dict:
             for c in sync_checks
         ],
     })
+
+    # ── Cache the response for future dedup (only if it passed) ──────────
+    if action_taken == "pass":
+        gate1.store_in_cache(prompt_text, {
+            "response_data": response_data,
+            "cost_usd": cost_usd,
+            "action_taken": action_taken,
+            "overall_risk": overall_risk,
+            "final_response": final_response,
+        })
 
     # ── Build OpenAI-compatible response ─────────────────────────────────
     return {
@@ -367,6 +438,198 @@ async def handle_chat_completion(request_body: dict) -> dict:
             "modifications": action_result["modifications"],
         },
     }
+
+
+# ── Gate 1 Fast-Path Handlers ────────────────────────────────────────────────
+
+
+async def _handle_cache_hit(
+    request_id: str,
+    prompt_text: str,
+    model: str,
+    cached: dict,
+    gate1_checks: list[dict],
+) -> dict:
+    """Handle a cache hit — return the cached response with $0 cost."""
+    response_data = cached["response_data"]
+    response_text = response_data["content"]
+    response_model = response_data.get("model", model)
+    final_response = cached.get("final_response", response_text)
+
+    # Log to database — $0 cost, 0 latency (served from cache)
+    request_record = {
+        "id": request_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model": response_model,
+        "prompt": prompt_text,
+        "response": response_text,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "latency_ms": 0.0,
+        "overall_risk": "low",
+        "action_taken": "pass",
+        "edited_response": None,
+        "metadata": {
+            "modifications": [],
+            "policy_decision": {"action": "pass", "all_risks": {}},
+            "gate1": {"cache_hit": True},
+        },
+    }
+    database.insert_request(request_record)
+
+    for check in gate1_checks:
+        check["request_id"] = request_id
+        check_copy = {k: v for k, v in check.items() if not k.startswith("_")}
+        database.insert_check_result(check_copy)
+
+    await _broadcast_sse("new_request", {
+        "id": request_id,
+        "timestamp": request_record["timestamp"],
+        "model": response_model,
+        "prompt_preview": prompt_text[:100] + ("..." if len(prompt_text) > 100 else ""),
+        "response_preview": final_response[:150] + ("..." if len(final_response) > 150 else ""),
+        "overall_risk": "low",
+        "action_taken": "pass",
+        "cost_usd": 0.0,
+        "latency_ms": 0.0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "was_modified": False,
+        "modifications": ["Served from cache — $0 cost"],
+        "sync_checks": [
+            {
+                "check_name": c.get("check_name"),
+                "dimension": c.get("dimension"),
+                "score": c.get("score"),
+                "risk_level": c.get("risk_level"),
+            }
+            for c in gate1_checks
+        ],
+    })
+
+    return {
+        "id": f"chatcmpl-{request_id[:8]}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": response_model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": final_response},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
+        "controlplane": {
+            "request_id": request_id,
+            "overall_risk": "low",
+            "action_taken": "pass",
+            "was_modified": False,
+            "modifications": ["Served from cache"],
+        },
+    }
+
+
+async def _handle_jailbreak_block(
+    request_id: str,
+    prompt_text: str,
+    model: str,
+    start_time: float,
+    gate1_checks: list[dict],
+) -> dict:
+    """Handle a jailbreak detection — block immediately, no LLM call."""
+    latency_ms = (time.time() - start_time) * 1000
+
+    block_message = (
+        "⛔ This request has been blocked by ControlPlane. "
+        "The prompt was flagged as a potential jailbreak or prompt-injection attempt. "
+        "If you believe this is an error, please contact your administrator."
+    )
+
+    request_record = {
+        "id": request_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model": model,
+        "prompt": prompt_text,
+        "response": "[LLM NOT CALLED — blocked by Gate 1 jailbreak filter]",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "latency_ms": latency_ms,
+        "overall_risk": "high",
+        "action_taken": "block",
+        "edited_response": block_message,
+        "metadata": {
+            "modifications": ["Blocked by Gate 1 jailbreak filter — LLM was NOT called"],
+            "policy_decision": {"action": "block", "all_risks": {"responsibility": "high"}},
+            "gate1": {"jailbreak_blocked": True},
+        },
+    }
+    database.insert_request(request_record)
+
+    for check in gate1_checks:
+        check["request_id"] = request_id
+        check_copy = {k: v for k, v in check.items() if not k.startswith("_")}
+        database.insert_check_result(check_copy)
+
+    await _broadcast_sse("new_request", {
+        "id": request_id,
+        "timestamp": request_record["timestamp"],
+        "model": model,
+        "prompt_preview": prompt_text[:100] + ("..." if len(prompt_text) > 100 else ""),
+        "response_preview": block_message[:150],
+        "overall_risk": "high",
+        "action_taken": "block",
+        "cost_usd": 0.0,
+        "latency_ms": latency_ms,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "was_modified": True,
+        "modifications": ["Blocked by Gate 1 jailbreak filter — LLM was NOT called"],
+        "sync_checks": [
+            {
+                "check_name": c.get("check_name"),
+                "dimension": c.get("dimension"),
+                "score": c.get("score"),
+                "risk_level": c.get("risk_level"),
+            }
+            for c in gate1_checks
+        ],
+    })
+
+    return {
+        "id": f"chatcmpl-{request_id[:8]}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": block_message},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
+        "controlplane": {
+            "request_id": request_id,
+            "overall_risk": "high",
+            "action_taken": "block",
+            "was_modified": True,
+            "modifications": ["Blocked by Gate 1 jailbreak filter"],
+        },
+    }
+
+
+# ── Gate 2 Async Deep Checks ────────────────────────────────────────────────
 
 
 async def _run_async_checks(
@@ -428,6 +691,19 @@ async def _run_async_checks(
 
     except Exception as e:
         print(f"[ControlPlane] Async check error for {request_id}: {e}")
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _replace_prompt_in_body(request_body: dict, sanitized_prompt: str) -> dict:
+    """Create a copy of the request body with the last message's content replaced."""
+    import copy
+    body = copy.deepcopy(request_body)
+    messages = body.get("messages", [])
+    if messages:
+        messages[-1]["content"] = sanitized_prompt
+    return body
 
 
 async def _call_live_llm(request_body: dict) -> dict:
