@@ -92,6 +92,35 @@ When 2+ risk dimensions (performance, cost, responsibility) are at medium risk s
 
 ---
 
+## Business Proposal & Core Product Features (The ControlPlane Dashboard)
+
+ControlPlane.ai offers a complete UI/UX observability suite tailored for enterprise compliance officers, AI engineers, and product managers. The platform is driven by four core dashboard modules designed to give your business total control over GenAI usage:
+
+### 1. Dashboard (Real-time Observability & Review)
+The Dashboard serves as the mission control for your AI ecosystem.
+- **Live Traffic Feed:** A Server-Sent Events (SSE) feed streams all AI requests in real-time, displaying cost, latency, risk vectors, and the action taken (Pass, Block, Escalate).
+- **Human Review Queue:** Any request flagged for escalation lands here. Human reviewers can inspect the prompt, the AI's intended response, and choose to "Approve" (release the response) or "Block" it. This builds a continuous human-in-the-loop feedback cycle and protects users from edge-case failures.
+
+### 2. Policies (Dynamic Governance)
+Different AI applications require different levels of strictness. The Policies module allows you to define configurable governance thresholds without writing a single line of code.
+- **Multi-tenant Profiles:** Define strict rules for your public-facing *Customer Support Bot* while allowing more permissive thresholds for your internal *Analytics Pipeline*.
+- **3-Dimensional Tuning:** Adjust sensitivity across three axes: **Performance** (hallucinations, refusal), **Cost** (token limits, cache), and **Responsibility** (toxicity, data leakage, PII).
+- **Instant Deployment:** Edits to policies are applied to the proxy immediately, protecting future requests without requiring a system restart or engineering deployment.
+
+### 3. Analytics (System Trust & Tuning)
+The Analytics engine translates operational metadata into actionable business intelligence.
+- **System Trust Score:** A high-level metric (0-100%) grading the reliability of your AI firewall, automatically penalized by false positives and false negatives. 
+- **Detection Performance Table:** Granular, per-check accuracy metrics. Easily identify if your `jailbreak_filter` is causing too many False Positives, allowing you to loosen that specific policy threshold.
+- **App-Specific Latency Tracking:** Monitor the average latency overhead introduced by the proxy for each specific application profile, ensuring SLAs are maintained.
+
+### 4. Compliance (Audit & Ledger)
+Designed for legal, security, and compliance teams to ensure strict regulatory adherence.
+- **Recent Activity Ledger:** An immutable, chronological ledger of all AI requests, their risk scores, and the final action taken.
+- **Human Override Tracking:** Explicitly tracks when a human reviewer overrides an AI decision (e.g., approving a blocked request), providing complete traceability for audits.
+- **App-Level Statistics:** Real-time visibility into the Total Requests, Block Rates, and Override Rates broken down by individual application profiles.
+
+---
+
 ## 3-Dimension Risk Model
 
 | Dimension | What It Catches | Checks |
@@ -143,6 +172,19 @@ The demo runs 3 phases:
 export OPENAI_API_KEY="sk-..."
 export CONTROLPLANE_MODE="live"
 python -m controlplane.main
+```
+
+### Testing
+We have added a suite of standalone test scripts to verify the core logic without spinning up the full API:
+```bash
+# Verify policy overrides and threshold configurations
+python test_policies.py
+
+# Verify the Server-Sent Events (SSE) broadcasting logic
+python test_sse.py
+
+# Verify the database schema and query functionality
+python controlplane/test_db.py
 ```
 
 ---
@@ -210,6 +252,7 @@ aic/
 │   ├── database.py          # SQLite storage (requests, checks, sessions, feedback)
 │   ├── api.py               # REST API endpoints
 │   ├── demo.py              # Traffic simulator (3 phases)
+│   ├── test_db.py           # Standalone DB unit tests
 │   ├── checkers/
 │   │   ├── gate1.py         # Pre-inference: cache, jailbreak, PII redaction
 │   │   ├── performance.py   # Confidence, hallucination, LLM-as-judge
@@ -219,6 +262,8 @@ aic/
 │       ├── index.html        # Real-time observability dashboard
 │       ├── app.js            # Dashboard logic + SSE handler
 │       └── style.css         # Dashboard styling
+├── test_policies.py          # Core policy logic tests
+├── test_sse.py               # Server-Sent Events tests
 ├── requirements.txt
 └── README.md
 ```
