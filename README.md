@@ -105,6 +105,7 @@ The Dashboard serves as the mission control for your AI ecosystem.
 Different AI applications require different levels of strictness. The Policies module allows you to define configurable governance thresholds without writing a single line of code.
 - **Multi-tenant Profiles:** Define strict rules for your public-facing *Customer Support Bot* while allowing more permissive thresholds for your internal *Analytics Pipeline*.
 - **3-Dimensional Tuning:** Adjust sensitivity across three axes: **Performance** (hallucinations, refusal), **Cost** (token limits, cache), and **Responsibility** (toxicity, data leakage, PII).
+- **Per-Region & Industry Configuration:** Readily adapt to different regulatory expectations (e.g. EU vs US data protection) by applying different policy profiles based on geography and use case.
 - **Instant Deployment:** Edits to policies are applied to the proxy immediately, protecting future requests without requiring a system restart or engineering deployment.
 
 ### 3. Analytics (System Trust & Tuning)
@@ -273,7 +274,8 @@ aic/
 ## Design Assumptions
 
 1. **Enterprise multi-tenant:** Three distinct app profiles with different risk tolerances operate simultaneously.
-2. **Scale:** Designed for tens of thousands of interactions per week (SQLite WAL mode handles concurrent reads).
-3. **Input/output layer:** Works at the API boundary (not model internals), compatible with any OpenAI-compatible provider.
-4. **Mock-first:** Full demonstration without API keys — all detection patterns work in mock mode.
-5. **Feedback-driven:** Human overrides flow back as false positive/negative signals to measure and tune detection quality.
+2. **Data Source Diversity:** Assumes a mix of well-governed and loosely-governed internal data sources feeding the AI, making rigorous output screening essential.
+3. **Scale:** Designed for tens of thousands of interactions per week (SQLite WAL mode handles concurrent reads).
+4. **Input/output layer:** Works at the API boundary (not model internals), compatible with any OpenAI-compatible provider.
+5. **Mock-first:** Full demonstration without API keys — all detection patterns work in mock mode.
+6. **Feedback-driven:** Human overrides flow back as false positive/negative signals to measure and tune detection quality.
