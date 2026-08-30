@@ -57,11 +57,11 @@ ControlPlane.ai is a transparent proxy that sits between your applications and t
 
 ## Key Features
 
-### 🛡️ 2-Gate Detection Pipeline
+### 2-Gate Detection Pipeline
 - **Gate 1 (Pre-Inference):** Cache deduplication, jailbreak blocking, PII redaction on input — all before the LLM is called, saving cost on every blocked request.
 - **Gate 2 (Post-Inference):** Sync checks (toxicity, PII, confidence, data leakage) block in real-time; async deep checks (hallucination, bias, LLM-as-judge) run in background.
 
-### 🏢 Multi-Tenant Policy Profiles
+### Multi-Tenant Policy Profiles
 Different AI use cases need different governance:
 - **Customer Support Bot** — Strict: blocks on medium responsibility risk
 - **Internal Knowledge Copilot** — Moderate: flags and edits, rarely blocks
@@ -69,22 +69,22 @@ Different AI use cases need different governance:
 
 Same AI output → different policy outcomes based on context. Policies are configurable at runtime via API and UI.
 
-### 🧠 AI-as-a-Judge Detection
+### AI-as-a-Judge Detection
 A secondary "judge" evaluates the primary model's output for factual accuracy, coherence, and safety — implementing the heterogeneous detection approach (not just regex).
 
-### 🔄 Multi-Turn Session Tracking
+### Multi-Turn Session Tracking
 Conversations are tracked across turns. Even if individual messages are low-risk, cumulative risk across a session can trigger escalation — addressing compounding risk in multi-turn interactions.
 
-### 📊 Feedback Loops & System Health
+### Feedback Loops & System Health
 - Human reviewers approve/block/release flagged responses
 - Every override is classified: **false positive**, **false negative**, or **confirmed**
 - Per-check accuracy rates and tuning suggestions
 - Override rate and trust metrics for stakeholder reporting
 
-### ⚡ Cross-Dimensional Risk Correlation
+### Cross-Dimensional Risk Correlation
 When 2+ risk dimensions (performance, cost, responsibility) are at medium risk simultaneously, the system escalates to high — because overlapping risks compound.
 
-### 🔍 Configurable Governance
+### Configurable Governance
 - Full CRUD API for policy profiles (`/api/policies`)
 - Policy editor UI in the dashboard
 - Complete audit trail for every decision
