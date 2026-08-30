@@ -11,49 +11,97 @@ ControlPlane.ai is a transparent proxy that sits between your applications and t
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        ControlPlane.ai                              │
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  GATE 1 — Pre-Inference (< 5ms, before LLM call)            │   │
-│  │  ┌──────────┐  ┌───────────────┐  ┌──────────────────────┐  │   │
-│  │  │  Cache    │→ │ Jailbreak     │→ │ PII Redaction        │  │   │
-│  │  │  Lookup   │  │ Filter        │  │ (Input Sanitization) │  │   │
-│  │  └──────────┘  └───────────────┘  └──────────────────────┘  │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                              ↓                                      │
-│                    ┌──────────────────┐                             │
-│                    │   LLM Provider   │  (OpenAI / Azure / etc.)    │
-│                    └──────────────────┘                             │
-│                              ↓                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  GATE 2 — Post-Inference                                     │   │
-│  │  ┌─────────────────┐  ┌─────────────────┐                   │   │
-│  │  │ SYNC (blocking)  │  │ ASYNC (bg)      │                   │   │
-│  │  │ • Toxicity       │  │ • Hallucination  │                   │   │
-│  │  │ • PII in output  │  │ • Bias detection │                   │   │
-│  │  │ • Confidence     │  │ • Cost anomaly   │                   │   │
-│  │  │ • Data leakage   │  │ • LLM-as-Judge   │                   │   │
-│  │  │ • Refusal detect │  │ • Waste detect   │                   │   │
-│  │  └─────────────────┘  └─────────────────┘                   │   │
-│  │              ↓                                               │   │
-│  │  ┌─────────────────────────────────────────────┐             │   │
-│  │  │  Policy Engine                               │             │   │
-│  │  │  • Per-app profiles (multi-tenant)           │             │   │
-│  │  │  • Cross-dimension risk correlation          │             │   │
-│  │  │  • Session-aware compounding risk            │             │   │
-│  │  │  → pass | flag | edit | escalate | block     │             │   │
-│  │  └─────────────────────────────────────────────┘             │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                              ↓                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Observability Layer                                         │   │
-│  │  • Real-time SSE dashboard       • Audit trail              │   │
-│  │  • Human review queue            • Feedback loops           │   │
-│  │  • System health metrics         • Per-check accuracy       │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Arial",
+    "fontSize": "15px",
+    "lineColor": "#64748b",
+    "primaryTextColor": "#0f172a"
+  },
+  "flowchart": {
+    "htmlLabels": true,
+    "nodeSpacing": 30,
+    "rankSpacing": 55,
+    "padding": 15,
+    "curve": "basis"
+  }
+}}%%
+
+flowchart TB
+
+    %% =====================================================
+    %% STYLES
+    %% =====================================================
+
+    classDef client fill:#f8fafc,stroke:#334155,stroke-width:2px,color:#0f172a;
+    classDef proxy fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#1e3a8a;
+    classDef gate fill:#f0fdfa,stroke:#0d9488,stroke-width:2px,color:#134e4a;
+    classDef llm fill:#fdf4ff,stroke:#c026d3,stroke-width:2px,color:#701a75;
+    classDef db fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#713f12;
+    classDef ui fill:#fff1f2,stroke:#e11d48,stroke-width:2px,color:#881337;
+
+
+    %% =====================================================
+    %% MAIN REQUEST PATH
+    %% =====================================================
+
+    subgraph Main[" "]
+        direction LR
+
+        Client["<b>Client / Copilot</b>"]:::client
+
+        subgraph ControlPlane["<b>ControlPlane.ai — Governance Proxy</b>"]
+            direction TB
+
+            Gate1["<b>① PRE-INFERENCE</b><br/>Cache Lookup → Jailbreak /<br/>Injection → PII Redaction"]:::gate
+
+            Gate2["<b>③ POST-INFERENCE<br/>GUARDRAILS</b><br/>Sync: Toxicity • Output<br/>PII • Token Budget<br/>Async: Hallucinations •<br/>Bias • LLM-as-a-Judge"]:::gate
+
+            Policy["<b>④ POLICY ENGINE</b><br/>Multi-Tenant Profiles → 3D<br/>Risk Model<br/><small>Performance • Cost • Responsibility</small><br/><b>Action:</b> Pass • Flag • Edit •<br/>Escalate • Block"]:::gate
+
+            Gate1 --> Gate2 --> Policy
+        end
+
+        Provider["<b>External LLM</b><br/><small>OpenAI • Azure • Anthropic</small>"]:::llm
+
+        Client ==>|"<b>1</b> API Request"| Gate1
+        Gate1 ==>|"<b>2</b> Sanitized Prompt"| Provider
+        Provider ==>|"<b>3</b> Raw AI Response"| Gate2
+        Policy ==>|"<b>5</b> Safe / Edited Response"| Client
+    end
+
+
+    %% =====================================================
+    %% OBSERVABILITY
+    %% =====================================================
+
+    subgraph Obs["<b>OBSERVABILITY & COMPLIANCE</b>"]
+        direction LR
+
+        Audit[("<b>Immutable Audit Ledger</b><br/><small>SQLite WAL</small>")]:::db
+
+        Events(("<b>Real-Time Event Bus</b><br/><small>SSE Stream</small>")):::ui
+
+        Dashboard["<b>Enterprise Dashboard</b><br/><small>Human Review Queue</small>"]:::ui
+
+        Audit --> Dashboard
+        Events --> Dashboard
+    end
+
+
+    %% =====================================================
+    %% ASYNC / TELEMETRY FLOWS
+    %% =====================================================
+
+    Provider -.->|"Background Evaluation"| Gate2
+
+    Gate2 -.->|"Deep Checks"| Audit
+
+    Policy -.->|"Audit Logs + Risk Scores"| Audit
+
+    Policy -.->|"Live Feed"| Events
 ```
 
 ---
