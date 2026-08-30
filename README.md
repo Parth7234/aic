@@ -4,6 +4,9 @@
 
 ControlPlane.ai is a transparent proxy that sits between your applications and their AI providers, intercepting every request and response to enforce safety, cost, and performance policies — before risky outputs ever reach a user.
 
+## 🌐 Live Demo
+**The prototype is fully deployed and accessible here:** [https://aic-ncw2.onrender.com](https://aic-ncw2.onrender.com)
+
 ---
 
 ## Architecture
