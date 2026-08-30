@@ -11,6 +11,7 @@ let eventSource = null;
 let costChart = null;
 let riskChart = null;
 let flagsChart = null;
+let feedEmptyEl = null;
 
 // ── Chart.js Global Config ──────────────────────────────────────────────────
 Chart.defaults.color = '#8a8f84';
@@ -20,6 +21,7 @@ Chart.defaults.font.size = 11;
 
 // ── Initialize ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+    feedEmptyEl = document.getElementById('feedEmpty');
     initCharts();
     connectSSE();
     loadInitialData();
@@ -71,12 +73,34 @@ function switchView(viewName) {
     document.querySelectorAll('.top-nav .nav-link').forEach(n => n.classList.remove('active'));
     document.getElementById(`nav-${viewName}`).classList.add('active');
     
+    document.getElementById('dashboard-view').style.display = 'none';
+    document.getElementById('policies-view').style.display = 'none';
+    const analyticsView = document.getElementById('analytics-view');
+    if (analyticsView) analyticsView.style.display = 'none';
+    const complianceView = document.getElementById('compliance-view');
+    if (complianceView) complianceView.style.display = 'none';
+
     if (viewName === 'dashboard') {
-        document.getElementById('dashboard-view').style.display = 'grid';
-        document.getElementById('policies-view').style.display = 'none';
+        document.getElementById('dashboard-view').style.display = 'flex';
+        // Reset app and risk filters to all when returning to dashboard
+        if (currentAppFilter !== 'all') {
+            document.querySelector('#appFilters [data-app="all"]')?.click();
+        }
+        if (currentFilter !== 'all') {
+            document.querySelector('#riskFilters [data-filter="all"]')?.click();
+        }
     } else if (viewName === 'policies') {
-        document.getElementById('dashboard-view').style.display = 'none';
         document.getElementById('policies-view').style.display = 'block';
+    } else if (viewName === 'analytics') {
+        if (analyticsView) {
+            analyticsView.style.display = 'block';
+            loadAnalytics();
+        }
+    } else if (viewName === 'compliance') {
+        if (complianceView) {
+            complianceView.style.display = 'block';
+            loadCompliance();
+        }
     }
 }
 
@@ -171,9 +195,8 @@ async function loadInitialData() {
 // ── Feed Management ─────────────────────────────────────────────────────────
 function addFeedItem(data, animate = true) {
     const feedList = document.getElementById('feedList');
-    const feedEmpty = document.getElementById('feedEmpty');
 
-    feedEmpty.style.display = 'none';
+    if (feedEmptyEl) feedEmptyEl.style.display = 'none';
 
     // Store in state
     feedItems.unshift(data);
@@ -276,7 +299,6 @@ function createFeedElement(data, animate = true) {
 
 function renderFeed() {
     const feedList = document.getElementById('feedList');
-    const feedEmpty = document.getElementById('feedEmpty');
     feedList.innerHTML = '';
 
     const filtered = feedItems.filter(i => {
@@ -286,10 +308,12 @@ function renderFeed() {
     });
 
     if (filtered.length === 0) {
-        feedList.appendChild(feedEmpty);
-        feedEmpty.style.display = 'flex';
+        if (feedEmptyEl) {
+            feedList.appendChild(feedEmptyEl);
+            feedEmptyEl.style.display = 'flex';
+        }
     } else {
-        feedEmpty.style.display = 'none';
+        if (feedEmptyEl) feedEmptyEl.style.display = 'none';
         filtered.forEach(data => {
             const el = createFeedElement(data, false);
             feedList.appendChild(el);
@@ -476,15 +500,25 @@ function renderDetail(data) {
         bodyHtml += '</div>';
     }
 
-    // Human review actions (for escalated / flagged items)
+    // Human review actions
+    bodyHtml += '<div class="review-actions">';
+    
     if (data.action_taken === 'escalate' || data.action_taken === 'flag') {
         bodyHtml += `
-            <div class="review-actions">
-                <button class="review-btn block" onclick="humanAction('${data.id}', 'block')">Halt Processing</button>
-                <button class="review-btn approve" onclick="humanAction('${data.id}', 'approve')">Authorize</button>
-            </div>
+            <button class="review-btn block" onclick="humanAction('${data.id}', 'block')">Halt Processing (Block)</button>
+            <button class="review-btn approve" onclick="humanAction('${data.id}', 'approve')">Authorize (Approve)</button>
+        `;
+    } else if (data.action_taken === 'pass') {
+        bodyHtml += `
+            <button class="review-btn block" onclick="humanAction('${data.id}', 'block')" style="width:100%">Mark as False Negative (Block)</button>
+        `;
+    } else if (data.action_taken === 'block' || data.action_taken === 'edit') {
+        bodyHtml += `
+            <button class="review-btn approve" onclick="humanAction('${data.id}', 'approve')" style="width:100%">Approve (False Positive)</button>
         `;
     }
+    
+    bodyHtml += '</div>';
 
     body.innerHTML = bodyHtml;
 }
@@ -552,9 +586,20 @@ function updateAsyncChecks(data) {
 // ── Stats & Charts ──────────────────────────────────────────────────────────
 async function refreshStats() {
     try {
-        const res = await fetch('/api/stats');
+        const url = `/api/stats${currentAppFilter !== 'all' ? '?app=' + currentAppFilter : ''}`;
+        const res = await fetch(url);
         const data = await res.json();
         updateStats(data);
+        
+        // Also refresh other views if they are active
+        const analyticsView = document.getElementById('analytics-view');
+        if (analyticsView && analyticsView.style.display !== 'none') {
+            loadAnalytics();
+        }
+        const complianceView = document.getElementById('compliance-view');
+        if (complianceView && complianceView.style.display !== 'none') {
+            loadCompliance();
+        }
     } catch (e) {
         console.warn('Stats refresh failed:', e);
     }
@@ -788,12 +833,20 @@ async function simulateTraffic() {
         "Describe the weather patterns on Mars",
     ];
 
+    const appIds = ['customer_support', 'internal_copilot', 'analytics_pipeline'];
+
     // Send 10 requests with slight delays
     for (let i = 0; i < 10; i++) {
+        // Randomly assign an app ID to the simulated request
+        const randomAppId = appIds[Math.floor(Math.random() * appIds.length)];
+        
         try {
             await fetch('/v1/chat/completions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-ControlPlane-App': randomAppId
+                },
                 body: JSON.stringify({
                     model: 'gpt-4o',
                     messages: [{ role: 'user', content: prompts[i] }],
@@ -1199,5 +1252,163 @@ async function loadFeedbackMetrics() {
         
     } catch (err) {
         console.error('Error loading feedback metrics:', err);
+    }
+}
+
+// ── Analytics & Compliance ──────────────────────────────────────────────────
+
+async function loadAnalytics() {
+    try {
+        const res = await fetch('/api/feedback/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        // Update Trust Score
+        const trustScore = 100 - (data.false_positive_rate + data.false_negative_rate);
+        const trustScoreClamped = Math.max(0, Math.min(100, trustScore));
+        const trustVal = document.getElementById('trustScoreValue');
+        if (trustVal) {
+            trustVal.innerHTML = Math.round(trustScoreClamped) + '<span class="percent">%</span>';
+        }
+
+        // Update Detection Performance Table
+        const tbody = document.getElementById('detectionPerformanceBody');
+        if (tbody) {
+            if (data.per_check && data.per_check.length > 0) {
+                let html = '';
+                data.per_check.forEach(pc => {
+                    html += `<tr>
+                        <td>${pc.check_name}</td>
+                        <td>${pc.total_reviews}</td>
+                        <td>${pc.false_positives}</td>
+                        <td>${pc.false_negatives}</td>
+                        <td>${Math.round(pc.false_positive_rate)}%</td>
+                    </tr>`;
+                });
+                tbody.innerHTML = html;
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:20px;">No detection performance data available.</td></tr>';
+            }
+        }
+        
+        // Fetch App Specific Latency
+        const apps = [
+            { id: 'customer_support', name: 'Customer Support', color: '#4a6b53' },
+            { id: 'internal_copilot', name: 'Internal Copilot', color: '#39b8d2' },
+            { id: 'analytics_pipeline', name: 'Analytics Pipeline', color: '#918bd9' }
+        ];
+        
+        const latencyContainer = document.getElementById('latencyBarsContainer');
+        if (latencyContainer) {
+            const promises = apps.map(async app => {
+                try {
+                    const r = await fetch(`/api/stats?app=${app.id}`);
+                    const d = await r.json();
+                    return { app, ms: d.avg_latency_ms || 0 };
+                } catch(e) {
+                    return { app, ms: 0 };
+                }
+            });
+            const latencies = await Promise.all(promises);
+            
+            let maxLatency = Math.max(...latencies.map(l => l.ms), 2000) * 1.1;
+            if (maxLatency === 0) maxLatency = 1000;
+            
+            let latencyHtml = '';
+            latencies.forEach(item => {
+                const pct = Math.max(5, (item.ms / maxLatency) * 100);
+                latencyHtml += `
+                    <div class="latency-bar-row">
+                        <div class="latency-bar-label">${item.app.name}</div>
+                        <div class="latency-bar-track">
+                            <div class="latency-bar-fill" style="width: ${pct}%; background-color: ${item.app.color};"></div>
+                        </div>
+                        <div class="latency-bar-value">${Math.round(item.ms)}ms</div>
+                    </div>
+                `;
+            });
+            latencyContainer.innerHTML = latencyHtml;
+        }
+
+    } catch (err) {
+        console.error('Error loading analytics:', err);
+    }
+}
+
+async function loadCompliance() {
+    try {
+        const res = await fetch('/api/requests?limit=200');
+        if (!res.ok) return;
+        const data = await res.json();
+        const requests = data.requests || [];
+        
+        const apps = {
+            'customer_support': { id: 'cs', total: 0, block: 0, override: 0 },
+            'internal_copilot': { id: 'ic', total: 0, block: 0, override: 0 },
+            'analytics_pipeline': { id: 'ap', total: 0, block: 0, override: 0 }
+        };
+        
+        requests.forEach(req => {
+            const app = apps[req.app_id];
+            if (!app) return;
+            
+            app.total++;
+            if (req.action_taken === 'block') {
+                app.block++;
+            }
+            
+            let isOverride = false;
+            try {
+                if (req.metadata) {
+                    const meta = JSON.parse(req.metadata);
+                    const originalAction = meta.policy_decision?.action;
+                    if (originalAction && req.action_taken !== originalAction && req.action_taken !== 'escalate') {
+                        isOverride = true;
+                        app.override++;
+                    }
+                }
+            } catch (e) {}
+            req.isOverride = isOverride; // Attach for the ledger rendering
+        });
+        
+        // Update DOM for cards
+        Object.values(apps).forEach(app => {
+            const totalEl = document.getElementById(`${app.id}-total`);
+            const blockEl = document.getElementById(`${app.id}-block`);
+            const overrideEl = document.getElementById(`${app.id}-override`);
+            
+            if (totalEl) totalEl.textContent = app.total;
+            if (blockEl) {
+                const bRate = app.total > 0 ? (app.block / app.total * 100) : 0;
+                blockEl.textContent = bRate.toFixed(1) + '%';
+            }
+            if (overrideEl) {
+                const oRate = app.total > 0 ? (app.override / app.total * 100) : 0;
+                overrideEl.textContent = oRate.toFixed(1) + '%';
+            }
+        });
+        
+        const container = document.getElementById('auditTrailList');
+        if (container) {
+            container.innerHTML = '';
+            if (requests.length > 0) {
+                requests.forEach(req => {
+                    const tr = document.createElement('tr');
+                    const overrideText = req.isOverride ? 'Yes' : 'No';
+                    tr.innerHTML = `
+                        <td>${formatTime(req.timestamp)}</td>
+                        <td>${req.app_id}</td>
+                        <td>${req.overall_risk || '—'}</td>
+                        <td style="font-weight:600; text-transform:uppercase;">${req.action_taken}</td>
+                        <td style="font-weight: ${req.isOverride ? '600' : '400'}; color: ${req.isOverride ? 'var(--text)' : 'var(--text-dim)'};">${overrideText}</td>
+                    `;
+                    container.appendChild(tr);
+                });
+            } else {
+                container.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:20px;">No recent activity found.</td></tr>';
+            }
+        }
+    } catch (err) {
+        console.error('Error loading compliance:', err);
     }
 }

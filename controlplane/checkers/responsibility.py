@@ -97,15 +97,21 @@ def _redact_pii(text: str, pii_matches: dict) -> str:
     return result
 
 
-def check_pii(response_text: str) -> dict:
+def check_pii(response_text: str, region: str = "global") -> dict:
     """
     Sync check (~5ms): Detect personally identifiable information
-    in the response.
+    in the response. Filters patterns based on region.
     """
     found_pii = {}
     total_count = 0
 
     for pii_type, pattern in PII_PATTERNS.items():
+        # Geographic filtering
+        if pii_type == "ssn" and region not in ["US", "global"]:
+            continue
+        if pii_type == "aadhaar" and region not in ["IN", "global"]:
+            continue
+
         matches = re.findall(pattern, response_text, re.IGNORECASE)
         if matches:
             found_pii[pii_type] = matches
@@ -285,13 +291,14 @@ def get_pii_redacted_text(response_text: str, pii_check_result: dict) -> str | N
     return _redact_pii(response_text, pii_matches)
 
 
-def run_sync_checks(response_text: str) -> list[dict]:
+def run_sync_checks(response_text: str, region: str = "global") -> list[dict]:
     """Run all synchronous responsibility checks."""
-    return [
-        check_pii(response_text),
+    results = [
+        check_pii(response_text, region=region),
         check_toxicity(response_text),
         check_data_leakage(response_text),
     ]
+    return results
 
 
 def run_async_checks(response_text: str) -> list[dict]:

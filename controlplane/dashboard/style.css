@@ -333,7 +333,8 @@ body {
 .main-grid {
     display: flex;
     gap: 1.5rem;
-    height: calc(100vh - 72px);
+    min-height: calc(100vh - 72px);
+    height: auto;
     padding: 1.5rem;
     max-width: 1700px;
     margin: 0 auto;
@@ -1271,4 +1272,238 @@ body {
 }
 .review-card:hover {
     background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── Policy View ─────────────────────────────────────────────────────────── */
+.policies-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.policy-card {
+    padding: 20px;
+    border-radius: var(--radius-organic-lg);
+    background: var(--bg-surface);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.policy-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 10px;
+}
+
+.policy-card-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.policy-name-input {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.policy-name-input:focus, .policy-name-input:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    outline: none;
+}
+
+.policy-matrix {
+    display: grid;
+    grid-template-columns: 120px repeat(3, 1fr);
+    gap: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.matrix-cell {
+    background: var(--bg-container);
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.matrix-cell.header {
+    background: rgba(255, 255, 255, 0.03);
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.matrix-cell.row-header {
+    justify-content: flex-start;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    text-transform: capitalize;
+}
+
+.action-select {
+    width: 100%;
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.action-select:focus, .action-select:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    outline: none;
+}
+
+.action-select option {
+    background: var(--bg-main);
+    color: var(--text);
+}
+
+/* ── Analytics Grid ──────────────────────────────────────────────────────── */
+.analytics-grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.latency-card {
+    grid-column: 1 / -1;
+}
+
+/* ── Analytics Table ─────────────────────────────────────────────────────── */
+.table-responsive {
+    overflow-x: auto;
+    margin-top: 15px;
+}
+
+.analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.analytics-table th {
+    padding: 12px 10px;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.analytics-table td {
+    padding: 12px 10px;
+    color: var(--text);
+    font-size: 13px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.analytics-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* ── Trust Score ─────────────────────────────────────────────────────────── */
+.trust-score-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.trust-score-value {
+    font-family: 'Playfair Display', serif;
+    font-size: 110px;
+    font-weight: 700;
+    line-height: 1;
+    margin: 30px 0 20px;
+    color: var(--text);
+}
+
+.trust-score-value .percent {
+    font-size: 40px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    margin-left: -5px;
+}
+
+.trust-score-subtitle {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+}
+
+/* ── Latency Bars ────────────────────────────────────────────────────────── */
+.latency-bars {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.latency-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.latency-bar-label {
+    width: 140px;
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.latency-bar-track {
+    flex: 1;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.latency-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.latency-bar-value {
+    width: 60px;
+    text-align: right;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
 }

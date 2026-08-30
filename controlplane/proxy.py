@@ -329,12 +329,15 @@ async def handle_chat_completion(request_body: dict, headers: dict = None) -> di
 
     cost_usd = cost_checker.estimate_cost(input_tokens, output_tokens, response_model)
 
-    sync_checks = []
     # Include Gate 1 checks in the sync results so they're visible in the dashboard
+    region = profile.get("region", "global")
+    
+    # 3. Run Synchronous Checks
+    sync_checks = []
     sync_checks.extend(gate1_checks)
     sync_checks.extend(perf_checker.run_sync_checks(response_text, prompt_text))
     sync_checks.extend(cost_checker.run_sync_checks(input_tokens, output_tokens, cost_usd))
-    sync_checks.extend(resp_checker.run_sync_checks(response_text))
+    sync_checks.extend(resp_checker.run_sync_checks(response_text, region=region))
 
     # ── Apply policy ─────────────────────────────────────────────────────
     policy_decision = policy.determine_action(sync_checks, profile=profile)

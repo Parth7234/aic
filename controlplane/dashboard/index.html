@@ -23,8 +23,8 @@
             <nav class="top-nav">
                 <a class="nav-link active" href="#" id="nav-dashboard" onclick="switchView('dashboard')">Dashboard</a>
                 <a class="nav-link" href="#" id="nav-policies" onclick="switchView('policies')">Policies</a>
-                <a class="nav-link" href="#">Analytics</a>
-                <a class="nav-link" href="#">Compliance</a>
+                <a class="nav-link" href="#" id="nav-analytics" onclick="switchView('analytics')">Analytics</a>
+                <a class="nav-link" href="#" id="nav-compliance" onclick="switchView('compliance')">Compliance</a>
             </nav>
         </div>
         <div class="top-bar-right">
@@ -286,6 +286,140 @@
             </div>
             <div id="policiesList" class="policies-grid">
                 <!-- Populated by JS -->
+            </div>
+        </div>
+    </main>
+
+    <!-- ─── Analytics View ─────────────────────────────────────────────── -->
+    <main class="analytics-view" id="analytics-view" style="display:none; padding: 20px;">
+        <div class="analytics-container custom-scrollbar">
+            <div class="policies-header">
+                <h2>System Analytics</h2>
+                <p>Detection performance and system trustworthiness.</p>
+            </div>
+            
+            <div class="analytics-grid">
+                <!-- Detection Performance Table -->
+                <div class="policy-card">
+                    <h3 class="section-title"><span class="material-symbols-outlined section-icon">analytics</span> DETECTION PERFORMANCE</h3>
+                    <div class="table-responsive">
+                        <table class="analytics-table">
+                            <thead>
+                                <tr>
+                                    <th>Check</th>
+                                    <th>Total Seen</th>
+                                    <th>False Positives</th>
+                                    <th>False Negatives</th>
+                                    <th>FP Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detectionPerformanceBody">
+                                <!-- Populated by JS -->
+                                <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:20px;">Loading data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- System Trust Score -->
+                <div class="policy-card trust-score-card">
+                    <h3 class="section-title" style="justify-content:center;"><span class="material-symbols-outlined section-icon">verified_user</span> SYSTEM TRUST SCORE</h3>
+                    <div class="trust-score-value" id="trustScoreValue">100<span class="percent">%</span></div>
+                    <div class="trust-score-subtitle">BASED ON FP & OVERRIDE RATES</div>
+                </div>
+
+                <!-- Average Latency -->
+                <div class="policy-card latency-card">
+                    <h3 class="section-title"><span class="material-symbols-outlined section-icon">timer</span> AVERAGE LATENCY (BY APP PROFILE)</h3>
+                    <div class="latency-bars" id="latencyBarsContainer">
+                        <!-- Populated by JS -->
+                        <p style="color:var(--text-dim);">Loading data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ─── Compliance View ────────────────────────────────────────────── -->
+    <main class="compliance-view" id="compliance-view" style="display:none; padding: 20px;">
+        <div class="compliance-container custom-scrollbar">
+            <div class="policies-header">
+                <h2>Compliance & Audit Log</h2>
+                <p>Immutable record of AI decisions and human overrides.</p>
+            </div>
+            
+            <div class="stat-row" style="margin-bottom: 20px;">
+                <!-- Customer Support -->
+                <div class="policy-card" style="padding: 20px;">
+                    <h3 class="section-title" style="font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 600; text-transform: none; color: var(--text); letter-spacing: normal;">Customer Support</h3>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; color: var(--text-dim);">
+                        <span>Total Requests</span>
+                        <span id="cs-total" style="font-weight: 600; color: var(--text);">0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; color: var(--text-dim);">
+                        <span>Block Rate</span>
+                        <span id="cs-block" style="font-weight: 600; color: var(--text);">0%</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim);">
+                        <span>Override Rate</span>
+                        <span id="cs-override" style="font-weight: 600; color: var(--text);">0%</span>
+                    </div>
+                </div>
+
+                <!-- Internal Copilot -->
+                <div class="policy-card" style="padding: 20px;">
+                    <h3 class="section-title" style="font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 600; text-transform: none; color: var(--text); letter-spacing: normal;">Internal Copilot</h3>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; color: var(--text-dim);">
+                        <span>Total Requests</span>
+                        <span id="ic-total" style="font-weight: 600; color: var(--text);">0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; color: var(--text-dim);">
+                        <span>Block Rate</span>
+                        <span id="ic-block" style="font-weight: 600; color: var(--text);">0%</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim);">
+                        <span>Override Rate</span>
+                        <span id="ic-override" style="font-weight: 600; color: var(--text);">0%</span>
+                    </div>
+                </div>
+
+                <!-- Analytics Pipeline -->
+                <div class="policy-card" style="padding: 20px;">
+                    <h3 class="section-title" style="font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 600; text-transform: none; color: var(--text); letter-spacing: normal;">Analytics Pipeline</h3>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; color: var(--text-dim);">
+                        <span>Total Requests</span>
+                        <span id="ap-total" style="font-weight: 600; color: var(--text);">0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; color: var(--text-dim);">
+                        <span>Block Rate</span>
+                        <span id="ap-block" style="font-weight: 600; color: var(--text);">0%</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim);">
+                        <span>Override Rate</span>
+                        <span id="ap-override" style="font-weight: 600; color: var(--text);">0%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="policy-card">
+                <h3 class="section-title"><span class="material-symbols-outlined section-icon">receipt_long</span> RECENT ACTIVITY LEDGER</h3>
+                <div class="table-responsive">
+                    <table class="analytics-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>App</th>
+                                <th>Risk</th>
+                                <th>Action</th>
+                                <th>Human Override</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditTrailList">
+                            <!-- Populated by JS -->
+                            <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:20px;">Loading data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </main>
