@@ -5,6 +5,7 @@
 // ── State ───────────────────────────────────────────────────────────────────
 let feedItems = [];
 let currentFilter = 'all';
+let currentAppFilter = 'all';
 let selectedRequestId = null;
 let eventSource = null;
 let costChart = null;
@@ -22,7 +23,22 @@ document.addEventListener('DOMContentLoaded', () => {
     initCharts();
     connectSSE();
     loadInitialData();
+    loadPolicies();
 });
+
+// ── View Management ─────────────────────────────────────────────────────────
+function switchView(viewName) {
+    document.querySelectorAll('.top-nav .nav-link').forEach(n => n.classList.remove('active'));
+    document.getElementById(`nav-${viewName}`).classList.add('active');
+    
+    if (viewName === 'dashboard') {
+        document.getElementById('dashboard-view').style.display = 'grid';
+        document.getElementById('policies-view').style.display = 'none';
+    } else if (viewName === 'policies') {
+        document.getElementById('dashboard-view').style.display = 'none';
+        document.getElementById('policies-view').style.display = 'block';
+    }
+}
 
 // ── SSE Connection ──────────────────────────────────────────────────────────
 function connectSSE() {
@@ -122,7 +138,9 @@ function addFeedItem(data, animate = true) {
 
     // Check filter
     if (currentFilter !== 'all' && data.overall_risk !== currentFilter) {
-        // Still add to state but don't render
+        return;
+    }
+    if (currentAppFilter !== 'all' && data.app_id !== currentAppFilter) {
         return;
     }
 
@@ -154,6 +172,15 @@ function createFeedElement(data, animate = true) {
     const actionClass = `action-${data.action_taken}`;
     const riskLabel = { high: 'Critical', medium: 'Elevated', low: 'Benign' }[data.overall_risk] || data.overall_risk;
     const actionLabel = data.action_taken;
+    
+    // App badge
+    const appLabels = {
+        'customer_support': { label: 'CS', class: 'cs' },
+        'internal_copilot': { label: 'IC', class: 'ic' },
+        'analytics_pipeline': { label: 'AP', class: 'ap' }
+    };
+    const appInfo = appLabels[data.app_id] || { label: data.app_id || 'DEF', class: 'def' };
+    const appBadgeHtml = `<span class="feed-badge app-${appInfo.class}" title="${data.app_id}">${appInfo.label}</span>`;
 
     // Determine response display
     let responseHtml = '';
@@ -178,6 +205,7 @@ function createFeedElement(data, animate = true) {
         <div class="feed-item-inner">
             <div class="feed-item-top">
                 <div class="feed-item-badges">
+                    ${appBadgeHtml}
                     <span class="feed-item-model">${escapeHtml(data.model || 'unknown')}</span>
                     <span class="feed-badge risk-${data.overall_risk}">${riskLabel}</span>
                     <span class="feed-badge ${actionClass}">${actionLabel}</span>
@@ -203,21 +231,16 @@ function createFeedElement(data, animate = true) {
     return el;
 }
 
-function setFilter(filter, btnEl) {
-    currentFilter = filter;
-
-    // Update button states
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btnEl.classList.add('active');
-
-    // Re-render feed
+function renderFeed() {
     const feedList = document.getElementById('feedList');
     const feedEmpty = document.getElementById('feedEmpty');
     feedList.innerHTML = '';
 
-    const filtered = filter === 'all'
-        ? feedItems
-        : feedItems.filter(i => i.overall_risk === filter);
+    const filtered = feedItems.filter(i => {
+        const passRisk = currentFilter === 'all' || i.overall_risk === currentFilter;
+        const passApp = currentAppFilter === 'all' || i.app_id === currentAppFilter;
+        return passRisk && passApp;
+    });
 
     if (filtered.length === 0) {
         feedList.appendChild(feedEmpty);
@@ -229,6 +252,26 @@ function setFilter(filter, btnEl) {
             feedList.appendChild(el);
         });
     }
+}
+
+function setFilter(filter, btnEl) {
+    currentFilter = filter;
+    document.querySelectorAll('#riskFilters .filter-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    renderFeed();
+}
+
+function setAppFilter(appId, btnEl) {
+    currentAppFilter = appId;
+    document.querySelectorAll('#appFilters .filter-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    
+    // Refresh stats from backend for this app
+    fetch(`/api/stats${appId !== 'all' ? '?app=' + appId : ''}`)
+        .then(r => r.json())
+        .then(data => updateStats(data));
+        
+    renderFeed();
 }
 
 // ── Request Detail ──────────────────────────────────────────────────────────
@@ -336,6 +379,24 @@ function renderDetail(data) {
     }
 
     bodyHtml += '<div class="document-divider"></div>';
+
+    // Policy Decisions
+    const metadata = data.metadata ? (typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata) : {};
+    const policyDecision = metadata.policy_decision || {};
+    const policyReasons = policyDecision.policy_reasons || [];
+    
+    if (policyReasons.length > 0) {
+        bodyHtml += `<div class="detail-section">
+            <div class="detail-section-title">
+                <span class="material-symbols-outlined">policy</span>
+                Policy Decisions
+            </div>
+            <ul style="margin:0; padding-left:20px; color:var(--text); font-size:12px; line-height:1.5;">
+                ${policyReasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+            </ul>
+        </div>`;
+        bodyHtml += '<div class="document-divider"></div>';
+    }
 
     // Check results
     if (data.checks && data.checks.length > 0) {
@@ -744,3 +805,110 @@ function formatDetails(details) {
         })
         .join('<br>');
 }
+
+// ── Policies Management ───────────────────────────────────────────────────────
+
+async function loadPolicies() {
+    try {
+        const res = await fetch('/api/policies');
+        const policies = await res.json();
+        
+        const container = document.getElementById('policiesList');
+        container.innerHTML = '';
+        
+        policies.forEach(p => {
+            container.appendChild(renderPolicyCard(p));
+        });
+    } catch (e) {
+        console.error('Failed to load policies', e);
+    }
+}
+
+function renderPolicyCard(policy) {
+    const card = document.createElement('div');
+    card.className = 'policy-card glass-panel paper-texture';
+    
+    let matrixHtml = '<div class="policy-matrix">';
+    const dims = ['performance', 'cost', 'responsibility'];
+    const levels = ['low', 'medium', 'high'];
+    
+    matrixHtml += '<div class="matrix-cell header">Dimension</div>';
+    levels.forEach(function(l) { matrixHtml += '<div class="matrix-cell header">' + l.toUpperCase() + ' Risk</div>'; });
+    
+    dims.forEach(function(d) {
+        matrixHtml += '<div class="matrix-cell row-header">' + d + '</div>';
+        levels.forEach(function(l) {
+            var currentAction = policy.policy_matrix[d] ? (policy.policy_matrix[d][l] || 'pass') : 'pass';
+            matrixHtml += '<div class="matrix-cell">'
+                + '<select class="action-select" data-dim="' + d + '" data-level="' + l + '">'
+                + '<option value="pass"' + (currentAction === 'pass' ? ' selected' : '') + '>Pass</option>'
+                + '<option value="flag"' + (currentAction === 'flag' ? ' selected' : '') + '>Flag</option>'
+                + '<option value="edit"' + (currentAction === 'edit' ? ' selected' : '') + '>Edit</option>'
+                + '<option value="block"' + (currentAction === 'block' ? ' selected' : '') + '>Block</option>'
+                + '<option value="escalate"' + (currentAction === 'escalate' ? ' selected' : '') + '>Escalate</option>'
+                + '</select>'
+                + '</div>';
+        });
+    });
+    matrixHtml += '</div>';
+    
+    var pName = escapeHtml(policy.name || policy.id);
+    var pId = escapeHtml(policy.id);
+    var pDesc = escapeHtml(policy.description || '');
+
+    card.innerHTML = '<div class="policy-card-header">'
+        + '<h3><input type="text" class="policy-name-input" value="' + pName + '"> '
+        + '<span style="font-size:12px;color:var(--text-dim)">(ID: ' + pId + ')</span></h3>'
+        + '<button class="btn btn-primary" onclick="savePolicy(\'' + pId + '\', this)">Save Changes</button>'
+        + '</div>'
+        + '<div class="policy-card-body">'
+        + '<div style="margin-bottom:15px">'
+        + '<label style="display:block;margin-bottom:5px;font-size:12px;color:var(--text-dim)">Description</label>'
+        + '<input type="text" class="policy-desc-input" value="' + pDesc + '" style="width:100%;background:rgba(0,0,0,0.1);border:1px solid rgba(255,255,255,0.1);color:var(--text);padding:5px;border-radius:3px;">'
+        + '</div>'
+        + matrixHtml
+        + '</div>';
+    return card;
+}
+
+async function savePolicy(policyId, btn) {
+    var card = btn.closest('.policy-card');
+    var name = card.querySelector('.policy-name-input').value;
+    var desc = card.querySelector('.policy-desc-input').value;
+    
+    var matrix = {};
+    var selects = card.querySelectorAll('.action-select');
+    selects.forEach(function(sel) {
+        var d = sel.dataset.dim;
+        var l = sel.dataset.level;
+        if (!matrix[d]) matrix[d] = {};
+        matrix[d][l] = sel.value;
+    });
+    
+    var existing;
+    try {
+        var r = await fetch('/api/policies/' + policyId);
+        existing = await r.json();
+    } catch(e) {}
+    
+    var data = existing || { id: policyId };
+    data.name = name;
+    data.description = desc;
+    data.policy_matrix = matrix;
+    
+    btn.textContent = 'Saving...';
+    
+    try {
+        await fetch('/api/policies/' + policyId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        btn.textContent = 'Saved!';
+        setTimeout(function() { btn.textContent = 'Save Changes'; }, 2000);
+    } catch (e) {
+        console.error(e);
+        btn.textContent = 'Error';
+    }
+}
+

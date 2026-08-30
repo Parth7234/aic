@@ -1,0 +1,35 @@
+# Virtual Environments
+venv/
+env/
+.venv/
+ENV/
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# SQLite Database & Runtime Logs (Database auto-creates on startup)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.log
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS generated files
+Thumbs.db

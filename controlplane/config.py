@@ -85,5 +85,77 @@ def get_model_pricing(model: str) -> dict:
     """Get pricing for a model, with fallback to default."""
     for key in MODEL_PRICING:
         if key in model.lower():
+
             return MODEL_PRICING[key]
     return MODEL_PRICING["_default"]
+
+
+# ── Policy Profiles ──────────────────────────────────────────────────────────
+
+DEFAULT_POLICY_PROFILES = {
+    "customer_support": {
+        "name": "Customer Support Bot",
+        "description": "Customer-facing chatbot — strict safety, low risk tolerance",
+        "risk_tolerance": "low",
+        "policy_matrix": {
+            "performance": {"low": "pass", "medium": "escalate", "high": "block"},
+            "cost":        {"low": "pass", "medium": "flag",     "high": "block"},
+            "responsibility": {"low": "pass", "medium": "block", "high": "block"},
+        },
+    },
+    "internal_copilot": {
+        "name": "Internal Knowledge Copilot",
+        "description": "Employee-facing assistant — moderate tolerance, flag but rarely block",
+        "risk_tolerance": "medium",
+        "policy_matrix": {
+            "performance": {"low": "pass", "medium": "flag", "high": "escalate"},
+            "cost":        {"low": "pass", "medium": "flag", "high": "block"},
+            "responsibility": {"low": "pass", "medium": "edit", "high": "block"},
+        },
+    },
+    "analytics_pipeline": {
+        "name": "Analytics & Decision Support",
+        "description": "Batch/internal analytics — high tolerance, log everything, block only critical",
+        "risk_tolerance": "high",
+        "policy_matrix": {
+            "performance": {"low": "pass", "medium": "pass", "high": "flag"},
+            "cost":        {"low": "pass", "medium": "pass", "high": "flag"},
+            "responsibility": {"low": "pass", "medium": "flag", "high": "block"},
+        },
+    },
+    "default": {
+        "name": "Default Profile",
+        "description": "Fallback when no app_id is specified — balanced policy",
+        "risk_tolerance": "medium",
+        "policy_matrix": {
+            "performance": {"low": "pass", "medium": "flag", "high": "escalate"},
+            "cost":        {"low": "pass", "medium": "flag", "high": "block"},
+            "responsibility": {"low": "pass", "medium": "edit", "high": "block"},
+        },
+    },
+}
+
+# ── In-Memory Policy Cache ───────────────────────────────────────────────────
+
+ACTIVE_POLICIES: dict[str, dict] = {}
+
+
+def reload_policy_cache():
+    """Read all active policies from the DB into ACTIVE_POLICIES."""
+    from . import database
+    policies = database.get_all_policies()
+    ACTIVE_POLICIES.clear()
+    for p in policies:
+        ACTIVE_POLICIES[p["id"]] = p
+
+
+def get_cached_policy(app_id: str) -> dict:
+    """Returns the profile from ACTIVE_POLICIES, fallback to 'default'."""
+    if not app_id:
+        app_id = "default"
+    return ACTIVE_POLICIES.get(app_id, ACTIVE_POLICIES.get("default", DEFAULT_POLICY_PROFILES["default"]))
+
+
+def update_cached_policy(policy_id: str, policy_data: dict):
+    """Keep memory synced during API updates."""
+    ACTIVE_POLICIES[policy_id] = policy_data

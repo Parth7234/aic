@@ -64,7 +64,7 @@ ESCALATE_MESSAGE = (
 )
 
 
-def determine_action(check_results: list[dict]) -> dict:
+def determine_action(check_results: list[dict], profile: dict = None) -> dict:
     """
     Given a list of check results, determine the highest-priority action.
 
@@ -74,22 +74,31 @@ def determine_action(check_results: list[dict]) -> dict:
             "overall_risk": str,    # low | medium | high
             "triggering_checks": list,
             "all_risks": dict,
+            "policy_reasons": list[str],
+            "policy_id": str,
         }
     """
+    policy_matrix = profile["policy_matrix"] if profile else POLICY_MATRIX
+    policy_id = profile.get("id", "default") if profile else "default"
+    policy_name = profile.get("name", "Default Profile") if profile else "Default Profile"
+
     if not check_results:
         return {
             "action": "pass",
             "overall_risk": "low",
             "triggering_checks": [],
             "all_risks": {},
+            "policy_reasons": ["No checks failed"],
+            "policy_id": policy_id,
         }
 
     highest_action = "pass"
     highest_risk = "low"
     triggering_checks = []
     all_risks = {"performance": "low", "cost": "low", "responsibility": "low"}
-
+    
     risk_priority = {"low": 0, "medium": 1, "high": 2}
+    policy_reasons = []
 
     for check in check_results:
         dimension = check.get("dimension", "performance")
@@ -102,7 +111,12 @@ def determine_action(check_results: list[dict]) -> dict:
             all_risks[dimension] = risk_level
 
         # Determine action from policy matrix
-        action = POLICY_MATRIX.get(dimension, {}).get(risk_level, "pass")
+        action = policy_matrix.get(dimension, {}).get(risk_level, "pass")
+        
+        if risk_level != "low" or action != "pass":
+            policy_reasons.append(
+                f"{dimension} dimension scored '{risk_level}' -> action '{action}' (policy: {policy_name})"
+            )
 
         # Keep highest priority action
         if ACTION_PRIORITY.get(action, 0) > ACTION_PRIORITY.get(
@@ -120,6 +134,9 @@ def determine_action(check_results: list[dict]) -> dict:
             highest_risk, 0
         ):
             highest_risk = risk_level
+            
+    if not policy_reasons:
+        policy_reasons = [f"All checks passed (policy: {policy_name})"]
 
     return {
         "action": highest_action,
@@ -134,6 +151,8 @@ def determine_action(check_results: list[dict]) -> dict:
             for c in triggering_checks
         ],
         "all_risks": all_risks,
+        "policy_reasons": policy_reasons,
+        "policy_id": policy_id,
     }
 
 

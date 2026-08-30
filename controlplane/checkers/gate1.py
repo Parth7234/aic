@@ -57,20 +57,20 @@ def _normalize_prompt(text: str) -> str:
 # ── Gate 1 Checks ────────────────────────────────────────────────────────────
 
 
-def check_cache(prompt: str) -> dict | None:
+def check_cache(prompt: str, app_id: str) -> dict | None:
     """
     Check if this prompt (normalized) has been seen before.
     Returns the cached response data if found, None otherwise.
     ~0ms — pure dict lookup.
     """
-    key = _normalize_prompt(prompt)
+    key = f"{app_id}:{_normalize_prompt(prompt)}"
     return _prompt_cache.get(key)
 
 
-def store_in_cache(prompt: str, cache_entry: dict):
+def store_in_cache(prompt: str, cache_entry: dict, app_id: str):
     """Store a successful response in the cache for future dedup."""
     global _prompt_cache
-    key = _normalize_prompt(prompt)
+    key = f"{app_id}:{_normalize_prompt(prompt)}"
     _prompt_cache[key] = cache_entry
     # Evict oldest if over limit
     if len(_prompt_cache) > _MAX_CACHE:

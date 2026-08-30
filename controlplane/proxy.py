@@ -230,7 +230,7 @@ def _get_mock_response(prompt: str) -> dict:
 # ── Proxy Handler ────────────────────────────────────────────────────────────
 
 
-async def handle_chat_completion(request_body: dict) -> dict:
+async def handle_chat_completion(request_body: dict, headers: dict = None) -> dict:
     """
     Process a chat completion request through the 2-Gate ControlPlane pipeline:
 
@@ -251,6 +251,12 @@ async def handle_chat_completion(request_body: dict) -> dict:
     request_id = str(uuid.uuid4())
     start_time = time.time()
 
+    # Extract app_id
+    app_id = request_body.get("controlplane", {}).get("app_id")
+    if not app_id and headers:
+        app_id = headers.get("x-controlplane-app") or headers.get("X-ControlPlane-App")
+    if not app_id:
+        app_id = "default"
     # Extract prompt from the request
     messages = request_body.get("messages", [])
     prompt_text = ""
@@ -262,17 +268,19 @@ async def handle_chat_completion(request_body: dict) -> dict:
     #  GATE 1 — PRE-INFERENCE INTERCEPTOR
     # ═══════════════════════════════════════════════════════════════════════
 
-    gate1_checks = []
+    # ── Get profile and run Gate 1 checks ──────────────────────────────
+    profile = config.get_cached_policy(app_id)
 
-    # ── 1a. Normalized String Cache ──────────────────────────────────────
-    cached = gate1.check_cache(prompt_text)
+    # ── 1a. Cache Check ──────────────────────────────────────────────────
+    cached = gate1.check_cache(prompt_text, app_id)
+    gate1_checks = []
     cache_check = gate1.make_cache_check_result(was_hit=cached is not None)
     gate1_checks.append(cache_check)
 
     if cached is not None:
         # CACHE HIT — return immediately, $0 cost, no LLM call
         print(f"[Gate1] Cache HIT for prompt: {prompt_text[:50]}...")
-        return await _handle_cache_hit(request_id, prompt_text, model, cached, gate1_checks)
+        return await _handle_cache_hit(request_id, prompt_text, model, cached, gate1_checks, app_id)
 
     # ── 1b. Jailbreak Filter ─────────────────────────────────────────────
     jailbreak_check = gate1.check_jailbreak(prompt_text)
@@ -281,7 +289,7 @@ async def handle_chat_completion(request_body: dict) -> dict:
     if jailbreak_check["risk_level"] == "high":
         # JAILBREAK DETECTED — block immediately, no LLM call
         print(f"[Gate1] JAILBREAK blocked: {prompt_text[:50]}...")
-        return await _handle_jailbreak_block(request_id, prompt_text, model, start_time, gate1_checks)
+        return await _handle_jailbreak_block(request_id, prompt_text, model, start_time, gate1_checks, app_id)
 
     # ── 1c. PII Redaction on Input ───────────────────────────────────────
     sanitized_prompt, pii_input_check = gate1.redact_pii_in_prompt(prompt_text)
@@ -323,7 +331,7 @@ async def handle_chat_completion(request_body: dict) -> dict:
     sync_checks.extend(resp_checker.run_sync_checks(response_text))
 
     # ── Apply policy ─────────────────────────────────────────────────────
-    policy_decision = policy.determine_action(sync_checks)
+    policy_decision = policy.determine_action(sync_checks, profile=profile)
     action_result = policy.apply_action(
         policy_decision["action"], response_text, sync_checks
     )
@@ -332,9 +340,23 @@ async def handle_chat_completion(request_body: dict) -> dict:
     action_taken = policy_decision["action"]
     overall_risk = policy_decision["overall_risk"]
 
+    # ── Audit Log ────────────────────────────────────────────────────────
+    database.insert_audit_log({
+        "event_type": "policy_decision",
+        "request_id": request_id,
+        "policy_id": app_id,
+        "details": {
+            "action": action_taken,
+            "overall_risk": overall_risk,
+            "policy_reasons": policy_decision.get("policy_reasons", []),
+            "triggering_checks": policy_decision.get("triggering_checks", []),
+        }
+    })
+
     # ── Log to database ──────────────────────────────────────────────────
     request_record = {
         "id": request_id,
+        "app_id": app_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": response_model,
         "prompt": prompt_text,
@@ -351,6 +373,8 @@ async def handle_chat_completion(request_body: dict) -> dict:
             "policy_decision": {
                 "action": policy_decision["action"],
                 "all_risks": policy_decision["all_risks"],
+                "profile_name": profile.get("name", "Default Profile"),
+                "policy_reasons": policy_decision.get("policy_reasons", []),
             },
             "gate1": {
                 "prompt_sanitized": sanitized_prompt != prompt_text,
@@ -369,12 +393,13 @@ async def handle_chat_completion(request_body: dict) -> dict:
 
     # ── Queue async deep checks (non-blocking) ───────────────────────────
     asyncio.create_task(
-        _run_async_checks(request_id, response_text, prompt_text, input_tokens, cost_usd)
+        _run_async_checks(request_id, response_text, prompt_text, input_tokens, cost_usd, profile)
     )
 
     # ── Broadcast SSE event ──────────────────────────────────────────────
     await _broadcast_sse("new_request", {
         "id": request_id,
+        "app_id": app_id,
         "timestamp": request_record["timestamp"],
         "model": response_model,
         "prompt_preview": prompt_text[:100] + ("..." if len(prompt_text) > 100 else ""),
@@ -406,7 +431,7 @@ async def handle_chat_completion(request_body: dict) -> dict:
             "action_taken": action_taken,
             "overall_risk": overall_risk,
             "final_response": final_response,
-        })
+        }, app_id)
 
     # ── Build OpenAI-compatible response ─────────────────────────────────
     return {
@@ -432,6 +457,8 @@ async def handle_chat_completion(request_body: dict) -> dict:
         # ControlPlane-specific metadata
         "controlplane": {
             "request_id": request_id,
+            "app_id": app_id,
+            "profile_name": profile["name"],
             "overall_risk": overall_risk,
             "action_taken": action_taken,
             "was_modified": action_result["was_modified"],
@@ -449,6 +476,7 @@ async def _handle_cache_hit(
     model: str,
     cached: dict,
     gate1_checks: list[dict],
+    app_id: str = "default",
 ) -> dict:
     """Handle a cache hit — return the cached response with $0 cost."""
     response_data = cached["response_data"]
@@ -459,6 +487,7 @@ async def _handle_cache_hit(
     # Log to database — $0 cost, 0 latency (served from cache)
     request_record = {
         "id": request_id,
+        "app_id": app_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": response_model,
         "prompt": prompt_text,
@@ -485,6 +514,7 @@ async def _handle_cache_hit(
 
     await _broadcast_sse("new_request", {
         "id": request_id,
+        "app_id": app_id,
         "timestamp": request_record["timestamp"],
         "model": response_model,
         "prompt_preview": prompt_text[:100] + ("..." if len(prompt_text) > 100 else ""),
@@ -527,6 +557,7 @@ async def _handle_cache_hit(
         },
         "controlplane": {
             "request_id": request_id,
+            "app_id": app_id,
             "overall_risk": "low",
             "action_taken": "pass",
             "was_modified": False,
@@ -541,6 +572,7 @@ async def _handle_jailbreak_block(
     model: str,
     start_time: float,
     gate1_checks: list[dict],
+    app_id: str = "default",
 ) -> dict:
     """Handle a jailbreak detection — block immediately, no LLM call."""
     latency_ms = (time.time() - start_time) * 1000
@@ -553,6 +585,7 @@ async def _handle_jailbreak_block(
 
     request_record = {
         "id": request_id,
+        "app_id": app_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "prompt": prompt_text,
@@ -579,6 +612,7 @@ async def _handle_jailbreak_block(
 
     await _broadcast_sse("new_request", {
         "id": request_id,
+        "app_id": app_id,
         "timestamp": request_record["timestamp"],
         "model": model,
         "prompt_preview": prompt_text[:100] + ("..." if len(prompt_text) > 100 else ""),
@@ -621,6 +655,7 @@ async def _handle_jailbreak_block(
         },
         "controlplane": {
             "request_id": request_id,
+            "app_id": app_id,
             "overall_risk": "high",
             "action_taken": "block",
             "was_modified": True,
@@ -638,6 +673,7 @@ async def _run_async_checks(
     prompt_text: str,
     input_tokens: int,
     cost_usd: float,
+    profile: dict = None,
 ):
     """Run deep checks asynchronously and update the database."""
     try:
@@ -661,7 +697,7 @@ async def _run_async_checks(
 
         # Check if async results change the overall risk
         all_checks = async_checks
-        async_decision = policy.determine_action(all_checks)
+        async_decision = policy.determine_action(all_checks, profile=profile)
 
         # Only escalate if async found something worse
         current = database.get_request(request_id)

@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="/dashboard/style.css?v=3">
+    <link rel="stylesheet" href="/dashboard/style.css?v=5">
 </head>
 <body class="paper-texture">
     <!-- ─── Top Navigation ─────────────────────────────────────────────── -->
@@ -21,10 +21,10 @@
                 <span class="logo-text">ControlPlane<span class="logo-dot">.ai</span></span>
             </div>
             <nav class="top-nav">
-                <a class="nav-link active" href="#">Dashboard</a>
+                <a class="nav-link active" href="#" id="nav-dashboard" onclick="switchView('dashboard')">Dashboard</a>
+                <a class="nav-link" href="#" id="nav-policies" onclick="switchView('policies')">Policies</a>
                 <a class="nav-link" href="#">Analytics</a>
                 <a class="nav-link" href="#">Compliance</a>
-                <a class="nav-link" href="#">Settings</a>
             </nav>
         </div>
         <div class="top-bar-right">
@@ -48,8 +48,8 @@
         </div>
     </header>
 
-    <!-- ─── Main Layout ────────────────────────────────────────────────── -->
-    <main class="main-grid">
+    <!-- ─── Main Layout (Dashboard View) ───────────────────────────────── -->
+    <main class="main-grid" id="dashboard-view">
         <!-- ─── Left Column: Dimension Gauges + Charts ─────────────────── -->
         <aside class="sidebar custom-scrollbar">
             <!-- Summary Cards -->
@@ -159,17 +159,31 @@
                     <span class="material-symbols-outlined" style="color:var(--primary);font-size:24px">stream</span>
                     Activity Stream
                 </h2>
-                <div class="feed-filters">
-                    <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All Activity</button>
-                    <button class="filter-btn" data-filter="high" onclick="setFilter('high', this)">
-                        <span class="risk-dot high"></span>Critical
-                    </button>
-                    <button class="filter-btn" data-filter="medium" onclick="setFilter('medium', this)">
-                        <span class="risk-dot medium"></span>Elevated
-                    </button>
-                    <button class="filter-btn" data-filter="low" onclick="setFilter('low', this)">
-                        <span class="risk-dot low"></span>Benign
-                    </button>
+                <div class="feed-filters-group">
+                    <div class="feed-filters" id="appFilters">
+                        <button class="filter-btn active" data-app="all" onclick="setAppFilter('all', this)">All Apps</button>
+                        <button class="filter-btn" data-app="customer_support" onclick="setAppFilter('customer_support', this)">
+                            <span class="app-dot cs"></span>Customer Support
+                        </button>
+                        <button class="filter-btn" data-app="internal_copilot" onclick="setAppFilter('internal_copilot', this)">
+                            <span class="app-dot ic"></span>Internal Copilot
+                        </button>
+                        <button class="filter-btn" data-app="analytics_pipeline" onclick="setAppFilter('analytics_pipeline', this)">
+                            <span class="app-dot ap"></span>Analytics
+                        </button>
+                    </div>
+                    <div class="feed-filters" id="riskFilters">
+                        <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All Risk</button>
+                        <button class="filter-btn" data-filter="high" onclick="setFilter('high', this)">
+                            <span class="risk-dot high"></span>Critical
+                        </button>
+                        <button class="filter-btn" data-filter="medium" onclick="setFilter('medium', this)">
+                            <span class="risk-dot medium"></span>Elevated
+                        </button>
+                        <button class="filter-btn" data-filter="low" onclick="setFilter('low', this)">
+                            <span class="risk-dot low"></span>Benign
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="feed-list custom-scrollbar" id="feedList">
@@ -208,6 +222,19 @@
         </aside>
     </main>
 
-    <script src="/dashboard/app.js?v=3"></script>
+    <!-- ─── Policies View ──────────────────────────────────────────────── -->
+    <main class="policies-view" id="policies-view" style="display:none; padding: 20px;">
+        <div class="policies-container custom-scrollbar">
+            <div class="policies-header">
+                <h2>Governance Policies</h2>
+                <p>Configure risk tolerances and enforcement actions per application.</p>
+            </div>
+            <div id="policiesList" class="policies-grid">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </main>
+
+    <script src="/dashboard/app.js?v=5"></script>
 </body>
 </html>
