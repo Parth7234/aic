@@ -217,6 +217,23 @@ async def get_recent_feedback_api(limit: int = Query(50, ge=1, le=200)):
     return {"feedback": database.get_recent_feedback(limit=limit), "limit": limit}
 
 
+# ── Sessions ─────────────────────────────────────────────────────────────────
+
+@router.get("/sessions")
+async def get_sessions(limit: int = Query(50, ge=1, le=200)):
+    """Get active sessions with cumulative risk tracking."""
+    return {"sessions": database.get_active_sessions(limit=limit), "limit": limit}
+
+
+@router.get("/sessions/{session_id}")
+async def get_session_detail(session_id: str):
+    """Get a session with all its associated requests."""
+    session = database.get_session(session_id)
+    if not session:
+        return {"error": "Session not found"}, 404
+    return session
+
+
 # ── Server-Sent Events Stream ───────────────────────────────────────────────
 
 @router.get("/stream")

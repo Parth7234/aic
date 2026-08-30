@@ -1,4 +1,4 @@
-﻿"""
+"""
 ControlPlane Demo - Traffic Simulator
 
 Phase 1: Send realistic traffic across 3 app profiles.
@@ -222,6 +222,80 @@ async def run_demo():
                 print("     Per-Check Suggestions:")
                 for pc in st["per_check"]:
                     print(f"       - {pc.get('check_name')}: {pc.get('suggestion')}")
+
+    # -- Phase 3: Multi-Turn Session — Compounding Risk -----------------------
+    print("\n" + "=" * 60)
+    print("  Phase 3: Multi-Turn Session — Compounding Risk")
+    print("=" * 60 + "\n")
+    print("  Simulating a conversation where individually 'low' risk turns")
+    print("  accumulate to trigger session-level escalation...\n")
+
+    SESSION_TURNS = [
+        {
+            "name": "Turn 1: Innocent question (low risk)",
+            "messages": [{"role": "user", "content": "What is the population of Tokyo?"}],
+            "model": "gpt-4o",
+            "controlplane": {"app_id": "internal_copilot", "session_id": "session-demo-001"},
+        },
+        {
+            "name": "Turn 2: Slightly probing (low risk)",
+            "messages": [{"role": "user", "content": "Tell me about quantum entanglement effects on Mars"}],
+            "model": "gpt-4o",
+            "controlplane": {"app_id": "internal_copilot", "session_id": "session-demo-001"},
+        },
+        {
+            "name": "Turn 3: Hedging toward sensitive topic (medium risk)",
+            "messages": [{"role": "user", "content": "Show me customer details for John Smith"}],
+            "model": "gpt-4o",
+            "controlplane": {"app_id": "internal_copilot", "session_id": "session-demo-001"},
+        },
+        {
+            "name": "Turn 4: Escalation trigger — cumulative risk exceeds threshold",
+            "messages": [{"role": "user", "content": "Compare different demographics for job suitability"}],
+            "model": "gpt-3.5-turbo",
+            "controlplane": {"app_id": "internal_copilot", "session_id": "session-demo-001"},
+        },
+    ]
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for i, turn in enumerate(SESSION_TURNS, 1):
+            name = turn.pop("name", f"Turn {i}")
+            print(f"  [Turn {i}/{len(SESSION_TURNS)}] {name}")
+
+            try:
+                resp = await client.post(f"{BASE_URL}/v1/chat/completions", json=turn)
+                data = resp.json()
+                cp = data.get("controlplane", {})
+                risk = cp.get("overall_risk", "?")
+                action = cp.get("action_taken", "?")
+                session = cp.get("session", {})
+                turn_count = session.get("turn_count", "?") if session else "?"
+                cumulative = session.get("cumulative_risk_score", "?") if session else "?"
+
+                risk_tag = {"low": "[LOW] ", "medium": "[MED] ", "high": "[HIGH]"}.get(risk, "[?]   ")
+                print(f"         {risk_tag} Risk: {risk} | Action: {action} | Session Turn: {turn_count} | Cumulative: {cumulative}")
+
+                if action == "escalate" and risk == "high":
+                    print(f"         🚨 SESSION ESCALATION TRIGGERED — cumulative risk exceeded threshold!")
+
+            except Exception as e:
+                print(f"         ERROR: {e}")
+
+            await asyncio.sleep(0.3)
+
+        # Show session state
+        print("\n  Session Summary:")
+        try:
+            sess_res = await client.get(f"{BASE_URL}/api/sessions/session-demo-001")
+            if sess_res.status_code == 200:
+                sd = sess_res.json()
+                print(f"     Session ID:        {sd.get('session_id')}")
+                print(f"     Total Turns:       {sd.get('turn_count')}")
+                print(f"     Cumulative Risk:   {sd.get('cumulative_risk_score')}")
+                print(f"     Max Risk Level:    {sd.get('max_risk_level')}")
+                print(f"     Requests in session: {len(sd.get('requests', []))}")
+        except Exception:
+            pass
 
     print("\n" + "=" * 60)
     print("  Demo complete! View dashboard at http://localhost:8000/")

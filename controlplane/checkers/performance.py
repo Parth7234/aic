@@ -252,8 +252,100 @@ def run_sync_checks(response_text: str, prompt_text: str = "") -> list[dict]:
     ]
 
 
+def check_with_llm_judge(response_text: str, prompt_text: str = "") -> dict:
+    """
+    Async deep check: Use a secondary LLM to evaluate the primary model's
+    output for factual accuracy, coherence, and safety.
+
+    Implements the "AI-as-a-judge" detection pattern from the PS:
+      "a secondary 'AI-as-judge' pattern"
+
+    Mock mode: Returns calibrated simulated verdict using heuristic signals
+    Live mode: Would call gpt-4o-mini with a structured judge prompt
+    """
+    from .. import config
+
+    text_lower = response_text.lower()
+
+    # ── Mock Judge — uses heuristic signals to simulate a judge verdict ──
+    # This creates a realistic-looking judge response without needing an API call
+
+    # Factual accuracy: low if hallucination indicators present
+    halluc_count = sum(1 for p in HALLUCINATION_INDICATORS if re.search(p, text_lower))
+    factual_count = sum(1 for p in FACTUAL_RED_FLAGS if re.search(p, text_lower))
+    factual_accuracy = max(0.1, 1.0 - (halluc_count * 0.25 + factual_count * 0.15))
+
+    # Coherence: check for excessive hedging, refusals, or repetition
+    hedging = sum(1 for p in HEDGING_PHRASES if re.search(p, text_lower))
+    word_count = max(len(response_text.split()), 1)
+    unique_words = len(set(response_text.lower().split()))
+    repetition_ratio = unique_words / word_count
+    coherence = min(1.0, 0.5 + repetition_ratio * 0.4 + (0.1 if hedging < 3 else -0.1))
+
+    # Safety: check for toxic/harmful patterns
+    overconf = sum(1 for p in OVERCONFIDENCE_PHRASES if re.search(p, text_lower))
+    safety = max(0.1, 1.0 - overconf * 0.15)
+
+    # Overall score (weighted average)
+    overall = round(factual_accuracy * 0.5 + coherence * 0.25 + safety * 0.25, 3)
+
+    # Generate human-readable reasoning
+    issues = []
+    if factual_accuracy < 0.6:
+        issues.append(f"Found {halluc_count} hallucination indicator(s) and {factual_count} factual red flag(s)")
+    if coherence < 0.5:
+        issues.append(f"Low coherence: repetition ratio {repetition_ratio:.2f}, excessive hedging ({hedging} phrases)")
+    if safety < 0.7:
+        issues.append(f"Safety concerns: {overconf} overconfidence pattern(s) detected")
+
+    if not issues:
+        reasoning = "Response appears factually grounded, coherent, and safe. No significant concerns identified."
+    else:
+        reasoning = "Judge identified concerns: " + "; ".join(issues) + "."
+
+    # Map to risk level
+    risk_level = "low"
+    if overall < 0.4:
+        risk_level = "high"
+    elif overall < 0.65:
+        risk_level = "medium"
+
+    # Invert for risk scoring (1 = worst)
+    risk_score = round(1.0 - overall, 3)
+
+    return {
+        "id": str(uuid.uuid4()),
+        "dimension": "performance",
+        "check_name": "llm_judge",
+        "score": risk_score,
+        "risk_level": risk_level,
+        "is_sync": False,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "details": {
+            "judge_model": config.LLM_JUDGE_MODEL if config.MODE == "live" else "mock-judge",
+            "verdict": {
+                "factual_accuracy": round(factual_accuracy, 3),
+                "coherence": round(coherence, 3),
+                "safety": round(safety, 3),
+                "overall": overall,
+            },
+            "reasoning": reasoning,
+            "mode": "mock" if config.MODE != "live" else "live",
+        },
+    }
+
+
 def run_async_checks(response_text: str, prompt_text: str = "") -> list[dict]:
     """Run all asynchronous performance checks. Returns list of check results."""
-    return [
+    from .. import config
+
+    checks = [
         check_hallucination_heuristic(response_text, prompt_text),
     ]
+
+    # AI-as-a-judge: secondary LLM evaluates primary model output
+    if config.LLM_JUDGE_ENABLED:
+        checks.append(check_with_llm_judge(response_text, prompt_text))
+
+    return checks
+

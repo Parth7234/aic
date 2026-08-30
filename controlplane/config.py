@@ -27,6 +27,22 @@ PORT = int(os.getenv("CONTROLPLANE_PORT", "8000"))
 # ── Database ─────────────────────────────────────────────────────────────────
 DB_PATH = os.getenv("CONTROLPLANE_DB", "controlplane.db")
 
+# ── Session Tracking ─────────────────────────────────────────────────────────
+# Cumulative risk score across a session that triggers escalation
+SESSION_RISK_ESCALATION_THRESHOLD = float(
+    os.getenv("SESSION_RISK_ESCALATION_THRESHOLD", "2.0")
+)
+# Number of turns in a session that triggers review
+SESSION_TURN_ESCALATION_THRESHOLD = int(
+    os.getenv("SESSION_TURN_ESCALATION_THRESHOLD", "5")
+)
+
+# ── LLM-as-a-Judge ──────────────────────────────────────────────────────────
+# Secondary LLM used to evaluate primary model outputs
+LLM_JUDGE_MODEL = os.getenv("LLM_JUDGE_MODEL", "gpt-4o-mini")
+LLM_JUDGE_ENABLED = os.getenv("LLM_JUDGE_ENABLED", "true").lower() == "true"
+
+
 # ── Performance Thresholds ───────────────────────────────────────────────────
 # Confidence score below this → flag as low confidence
 CONFIDENCE_THRESHOLD_LOW = float(os.getenv("CONFIDENCE_THRESHOLD_LOW", "0.3"))

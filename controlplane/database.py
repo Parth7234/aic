@@ -1,4 +1,4 @@
-﻿"""
+"""
 ControlPlane Database â€” SQLite storage for requests, check results, and metrics.
 """
 
@@ -44,6 +44,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS requests (
                 id TEXT PRIMARY KEY,
                 app_id TEXT DEFAULT 'default',
+                session_id TEXT,
                 timestamp TEXT NOT NULL,
                 model TEXT NOT NULL,
                 prompt TEXT NOT NULL,
@@ -108,18 +109,32 @@ def init_db():
                 timestamp TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                app_id TEXT DEFAULT 'default',
+                turn_count INTEGER DEFAULT 0,
+                cumulative_risk_score REAL DEFAULT 0.0,
+                max_risk_level TEXT DEFAULT 'low',
+                first_seen TEXT NOT NULL,
+                last_seen TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_requests_timestamp
                 ON requests(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_requests_risk
                 ON requests(overall_risk);
             CREATE INDEX IF NOT EXISTS idx_requests_app_id
                 ON requests(app_id);
+            CREATE INDEX IF NOT EXISTS idx_requests_session
+                ON requests(session_id);
             CREATE INDEX IF NOT EXISTS idx_check_results_request
                 ON check_results(request_id);
             CREATE INDEX IF NOT EXISTS idx_check_results_dimension
                 ON check_results(dimension);
             CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp
                 ON audit_log(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_sessions_app
+                ON sessions(app_id);
         """)
     
     seed_default_policies()
@@ -161,12 +176,13 @@ def insert_request(data: dict) -> str:
     with get_db() as conn:
         conn.execute(
             """INSERT INTO requests
-               (id, app_id, timestamp, model, prompt, response, input_tokens, output_tokens,
+               (id, app_id, session_id, timestamp, model, prompt, response, input_tokens, output_tokens,
                 cost_usd, latency_ms, overall_risk, action_taken, edited_response, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 data["id"],
                 data.get("app_id", "default"),
+                data.get("session_id"),
                 data.get("timestamp", datetime.now(timezone.utc).isoformat()),
                 data.get("model", "unknown"),
                 data.get("prompt", ""),
@@ -634,5 +650,83 @@ def get_recent_feedback(limit: int = 50) -> list[dict]:
     with get_db() as conn:
         rows = conn.execute(
             "SELECT * FROM feedback ORDER BY timestamp DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Session Tracking ─────────────────────────────────────────────────────────
+
+def upsert_session(session_id: str, app_id: str, risk_score: float, risk_level: str) -> dict:
+    """Create or update a session with accumulated risk from a new turn."""
+    risk_priority = {"low": 0, "medium": 1, "high": 2}
+    now = datetime.now(timezone.utc).isoformat()
+    
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        
+        if existing:
+            existing = dict(existing)
+            new_turn_count = existing["turn_count"] + 1
+            new_cumulative = existing["cumulative_risk_score"] + risk_score
+            new_max = risk_level if risk_priority.get(risk_level, 0) > risk_priority.get(existing["max_risk_level"], 0) else existing["max_risk_level"]
+            
+            conn.execute(
+                """UPDATE sessions SET 
+                   turn_count = ?, cumulative_risk_score = ?, max_risk_level = ?, last_seen = ?
+                   WHERE session_id = ?""",
+                (new_turn_count, new_cumulative, new_max, now, session_id)
+            )
+            return {
+                "session_id": session_id,
+                "app_id": existing["app_id"],
+                "turn_count": new_turn_count,
+                "cumulative_risk_score": new_cumulative,
+                "max_risk_level": new_max,
+                "first_seen": existing["first_seen"],
+                "last_seen": now,
+            }
+        else:
+            conn.execute(
+                """INSERT INTO sessions
+                   (session_id, app_id, turn_count, cumulative_risk_score, max_risk_level, first_seen, last_seen)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (session_id, app_id, 1, risk_score, risk_level, now, now)
+            )
+            return {
+                "session_id": session_id,
+                "app_id": app_id,
+                "turn_count": 1,
+                "cumulative_risk_score": risk_score,
+                "max_risk_level": risk_level,
+                "first_seen": now,
+                "last_seen": now,
+            }
+
+
+def get_session(session_id: str) -> dict | None:
+    """Get a session with all its associated requests."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        if not row:
+            return None
+        session = dict(row)
+        
+        requests = conn.execute(
+            "SELECT id, timestamp, prompt, overall_risk, action_taken FROM requests WHERE session_id = ? ORDER BY timestamp",
+            (session_id,)
+        ).fetchall()
+        session["requests"] = [dict(r) for r in requests]
+        return session
+
+
+def get_active_sessions(limit: int = 50) -> list[dict]:
+    """Get active sessions ordered by most recent activity."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM sessions ORDER BY last_seen DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]

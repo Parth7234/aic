@@ -257,6 +257,12 @@ async def handle_chat_completion(request_body: dict, headers: dict = None) -> di
         app_id = headers.get("x-controlplane-app") or headers.get("X-ControlPlane-App")
     if not app_id:
         app_id = "default"
+
+    # Extract session_id for multi-turn tracking
+    session_id = request_body.get("controlplane", {}).get("session_id")
+    if not session_id and headers:
+        session_id = headers.get("x-controlplane-session") or headers.get("X-ControlPlane-Session")
+
     # Extract prompt from the request
     messages = request_body.get("messages", [])
     prompt_text = ""
@@ -340,6 +346,25 @@ async def handle_chat_completion(request_body: dict, headers: dict = None) -> di
     action_taken = policy_decision["action"]
     overall_risk = policy_decision["overall_risk"]
 
+    # ── Session Tracking & Escalation ────────────────────────────────────
+    session_data = None
+    if session_id:
+        risk_score_map = {"low": 0.2, "medium": 0.6, "high": 1.0}
+        risk_score = risk_score_map.get(overall_risk, 0.2)
+        session_data = database.upsert_session(session_id, app_id, risk_score, overall_risk)
+
+        # Check if session-level escalation is needed
+        session_override = policy.check_session_escalation(session_data, overall_risk)
+        if session_override:
+            # Override action if session risk exceeds threshold
+            if policy.ACTION_PRIORITY.get(session_override["action"], 0) > policy.ACTION_PRIORITY.get(action_taken, 0):
+                action_taken = session_override["action"]
+                overall_risk = session_override["overall_risk"]
+                action_result = policy.apply_action(action_taken, response_text, sync_checks)
+                final_response = action_result["final_response"]
+                policy_decision["policy_reasons"].extend(session_override["reasons"])
+                print(f"[Session] Escalated session {session_id}: {session_override['reasons']}")
+
     # ── Audit Log ────────────────────────────────────────────────────────
     database.insert_audit_log({
         "event_type": "policy_decision",
@@ -350,6 +375,8 @@ async def handle_chat_completion(request_body: dict, headers: dict = None) -> di
             "overall_risk": overall_risk,
             "policy_reasons": policy_decision.get("policy_reasons", []),
             "triggering_checks": policy_decision.get("triggering_checks", []),
+            "session_id": session_id,
+            "session_data": session_data,
         }
     })
 
@@ -357,6 +384,7 @@ async def handle_chat_completion(request_body: dict, headers: dict = None) -> di
     request_record = {
         "id": request_id,
         "app_id": app_id,
+        "session_id": session_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": response_model,
         "prompt": prompt_text,
@@ -380,6 +408,11 @@ async def handle_chat_completion(request_body: dict, headers: dict = None) -> di
                 "prompt_sanitized": sanitized_prompt != prompt_text,
                 "pii_types_redacted": pii_input_check["details"].get("pii_types", []),
             },
+            "session": {
+                "session_id": session_id,
+                "turn_count": session_data["turn_count"] if session_data else None,
+                "cumulative_risk": session_data["cumulative_risk_score"] if session_data else None,
+            } if session_id else None,
         },
     }
 
@@ -458,11 +491,16 @@ async def handle_chat_completion(request_body: dict, headers: dict = None) -> di
         "controlplane": {
             "request_id": request_id,
             "app_id": app_id,
+            "session_id": session_id,
             "profile_name": profile["name"],
             "overall_risk": overall_risk,
             "action_taken": action_taken,
             "was_modified": action_result["was_modified"],
             "modifications": action_result["modifications"],
+            "session": {
+                "turn_count": session_data["turn_count"],
+                "cumulative_risk_score": session_data["cumulative_risk_score"],
+            } if session_data else None,
         },
     }
 

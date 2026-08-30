@@ -19,6 +19,7 @@ Actions:
   - throttle: Response goes through but rate limit is applied
 """
 
+from . import config
 from .checkers import responsibility as resp_checker
 
 # ── Policy Rules ─────────────────────────────────────────────────────────────
@@ -134,7 +135,25 @@ def determine_action(check_results: list[dict], profile: dict = None) -> dict:
             highest_risk, 0
         ):
             highest_risk = risk_level
-            
+
+    # ── Cross-Dimensional Escalation ─────────────────────────────────────
+    # If 2+ dimensions are at medium risk, escalate to high.
+    # This addresses overlapping risks: e.g. a fabricated detail about a
+    # person is simultaneously a hallucination AND a privacy concern.
+    medium_dimensions = [d for d, r in all_risks.items() if r == "medium"]
+    if len(medium_dimensions) >= 2 and highest_risk == "medium":
+        highest_risk = "high"
+        # Escalate action: use the policy matrix's "high" action for the
+        # first medium dimension, or default to "escalate"
+        escalated_action = policy_matrix.get(medium_dimensions[0], {}).get("high", "escalate")
+        if ACTION_PRIORITY.get(escalated_action, 0) > ACTION_PRIORITY.get(highest_action, 0):
+            highest_action = escalated_action
+        policy_reasons.append(
+            f"Cross-dimensional escalation: {len(medium_dimensions)} dimensions "
+            f"at medium risk ({', '.join(medium_dimensions)}) → compounded to high "
+            f"(policy: {policy_name})"
+        )
+
     if not policy_reasons:
         policy_reasons = [f"All checks passed (policy: {policy_name})"]
 
@@ -218,3 +237,46 @@ def apply_action(
         "modification_type": None,
         "modifications": [],
     }
+
+
+# ── Session-Aware Escalation ─────────────────────────────────────────────────
+
+def check_session_escalation(session_data: dict, current_risk: str) -> dict | None:
+    """
+    Check if a session's cumulative risk warrants escalation,
+    even if the individual turn's risk is low.
+
+    Returns an override dict if escalation is needed, else None.
+    """
+    if not session_data:
+        return None
+
+    cumulative = session_data.get("cumulative_risk_score", 0.0)
+    turn_count = session_data.get("turn_count", 0)
+    threshold = config.SESSION_RISK_ESCALATION_THRESHOLD
+    turn_threshold = config.SESSION_TURN_ESCALATION_THRESHOLD
+
+    reasons = []
+
+    if cumulative >= threshold:
+        reasons.append(
+            f"Session cumulative risk ({cumulative:.2f}) exceeds threshold ({threshold})"
+        )
+
+    if turn_count >= turn_threshold and current_risk != "low":
+        reasons.append(
+            f"Session has {turn_count} turns (threshold: {turn_threshold}) with ongoing risk"
+        )
+
+    if reasons:
+        return {
+            "action": "escalate",
+            "overall_risk": "high",
+            "reasons": reasons,
+            "session_id": session_data.get("session_id"),
+            "cumulative_risk_score": cumulative,
+            "turn_count": turn_count,
+        }
+
+    return None
+

@@ -76,7 +76,7 @@ async def chat_completions(request: Request):
 
 def main():
     uvicorn.run(
-        "aic.controlplane.main:app",
+        "controlplane.main:app",
         host=config.HOST,
         port=config.PORT,
         reload=False,
