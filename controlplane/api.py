@@ -133,22 +133,88 @@ async def get_audit_log(
 async def take_action(request_id: str, request: Request):
     """Human review action — approve, block, or release a response."""
     body = await request.json()
-    action = body.get("action", "approve")
+    human_action = body.get("action", "approve")
 
-    if action == "approve":
+    req = database.get_request(request_id)
+    if not req:
+        return {"error": "Request not found"}, 404
+
+    original_action = req.get("action_taken", "pass")
+    
+    # Classify feedback type
+    feedback_type = "confirmed"
+    if original_action in ["block", "escalate", "flag"]:
+        if human_action in ["approve", "release"]:
+            feedback_type = "false_positive"
+        elif human_action == "block":
+            feedback_type = "confirmed"
+    elif original_action == "edit":
+        if human_action == "release":
+            feedback_type = "false_positive"
+        elif human_action == "approve":
+            feedback_type = "confirmed"
+    elif original_action == "pass":
+        if human_action == "block":
+            feedback_type = "false_negative"
+        elif human_action == "approve":
+            feedback_type = "confirmed"
+
+    # Identify highest risk check to associate feedback
+    check_name = None
+    dimension = None
+    if req.get("checks"):
+        # Sort checks by risk_level (high > medium > low)
+        risk_map = {"high": 3, "medium": 2, "low": 1}
+        sorted_checks = sorted(req["checks"], key=lambda c: risk_map.get(c.get("risk_level", "low"), 0), reverse=True)
+        check_name = sorted_checks[0].get("check_name")
+        dimension = sorted_checks[0].get("dimension")
+
+    # Update request action
+    if human_action == "approve" or human_action == "release":
         database.update_request(request_id, {"action_taken": "pass"})
-    elif action == "block":
+    elif human_action == "block":
         database.update_request(request_id, {"action_taken": "block"})
-    elif action == "release":
-        database.update_request(request_id, {"action_taken": "pass"})
 
-    # Broadcast the action
-    await proxy._broadcast_sse("human_action", {
+    # Insert feedback record
+    database.insert_feedback({
         "request_id": request_id,
-        "action": action,
+        "original_action": original_action,
+        "human_action": human_action,
+        "feedback_type": feedback_type,
+        "check_name": check_name,
+        "dimension": dimension,
+        "reason": body.get("reason", "")
+    })
+    
+    database.insert_audit_log({
+        "event_type": "human_override",
+        "request_id": request_id,
+        "details": {"original_action": original_action, "human_action": human_action, "feedback_type": feedback_type},
+        "actor": "admin"
     })
 
-    return {"status": "ok", "action": action, "request_id": request_id}
+    # Broadcast the action and feedback update
+    await proxy._broadcast_sse("human_action", {
+        "request_id": request_id,
+        "action": human_action,
+    })
+    await proxy._broadcast_sse("feedback_recorded", {
+        "request_id": request_id
+    })
+
+    return {"status": "ok", "action": human_action, "feedback_type": feedback_type}
+
+# ── Feedback ─────────────────────────────────────────────────────────────────
+
+@router.get("/feedback/stats")
+async def get_feedback_stats_api(app: str | None = Query(None)):
+    """Get aggregated feedback metrics."""
+    return database.get_feedback_stats(app_id_filter=app)
+
+@router.get("/feedback")
+async def get_recent_feedback_api(limit: int = Query(50, ge=1, le=200)):
+    """Get recent human overrides."""
+    return {"feedback": database.get_recent_feedback(limit=limit), "limit": limit}
 
 
 # ── Server-Sent Events Stream ───────────────────────────────────────────────

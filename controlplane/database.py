@@ -1,5 +1,5 @@
-"""
-ControlPlane Database — SQLite storage for requests, check results, and metrics.
+﻿"""
+ControlPlane Database â€” SQLite storage for requests, check results, and metrics.
 """
 
 import json
@@ -95,6 +95,19 @@ def init_db():
                 actor TEXT DEFAULT 'system'
             );
 
+            CREATE TABLE IF NOT EXISTS feedback (
+                id TEXT PRIMARY KEY,
+                request_id TEXT NOT NULL REFERENCES requests(id),
+                original_action TEXT NOT NULL,
+                human_action TEXT NOT NULL,
+                feedback_type TEXT NOT NULL,
+                check_name TEXT,
+                dimension TEXT,
+                reason TEXT DEFAULT '',
+                actor TEXT DEFAULT 'admin',
+                timestamp TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_requests_timestamp
                 ON requests(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_requests_risk
@@ -141,7 +154,7 @@ def seed_default_policies():
                 )
 
 
-# ── Request CRUD ─────────────────────────────────────────────────────────────
+# â”€â”€ Request CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def insert_request(data: dict) -> str:
     """Insert a new request record. Returns the request ID."""
@@ -232,7 +245,7 @@ def get_requests(
         return [dict(r) for r in rows]
 
 
-# ── Check Results ────────────────────────────────────────────────────────────
+# â”€â”€ Check Results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def insert_check_result(data: dict) -> str:
     """Insert a check result."""
@@ -257,7 +270,7 @@ def insert_check_result(data: dict) -> str:
     return data["id"]
 
 
-# ── Aggregation / Stats ─────────────────────────────────────────────────────
+# â”€â”€ Aggregation / Stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def get_stats(app_id_filter: str | None = None) -> dict:
     """Get aggregate statistics for the dashboard."""
@@ -365,7 +378,7 @@ def get_rolling_avg_cost(window: int = 20) -> float:
         return row["avg"]
 
 
-# ── Policies CRUD ────────────────────────────────────────────────────────────
+# â”€â”€ Policies CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def get_all_policies() -> list[dict]:
     """Get all active policies."""
@@ -459,7 +472,7 @@ def delete_policy(policy_id: str):
                     (datetime.now(timezone.utc).isoformat(), policy_id))
 
 
-# ── Audit Log ────────────────────────────────────────────────────────────────
+# â”€â”€ Audit Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def insert_audit_log(data: dict) -> str:
     """Insert an audit log entry."""
@@ -509,3 +522,117 @@ def get_audit_log(policy_id: str | None = None, event_type: str | None = None, l
             log["details"] = json.loads(log["details"])
             logs.append(log)
         return logs
+
+
+
+# ── Feedback Loop ────────────────────────────────────────────────────────────
+
+def insert_feedback(data: dict) -> str:
+    """Insert a human feedback record for an overridden request."""
+    if "id" not in data:
+        import uuid
+        data["id"] = str(uuid.uuid4())
+        
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO feedback
+               (id, request_id, original_action, human_action, feedback_type, 
+                check_name, dimension, reason, actor, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                data["id"],
+                data["request_id"],
+                data["original_action"],
+                data["human_action"],
+                data["feedback_type"],
+                data.get("check_name"),
+                data.get("dimension"),
+                data.get("reason", ""),
+                data.get("actor", "admin"),
+                data.get("timestamp", datetime.now(timezone.utc).isoformat())
+            )
+        )
+    return data["id"]
+
+def get_feedback_stats(app_id_filter: str | None = None) -> dict:
+    """Aggregate feedback metrics (false positive rate, false negative rate, override rate)."""
+    with get_db() as conn:
+        # Total requests that could have been reviewed (simplified to total requests)
+        where_clause = ""
+        params = []
+        if app_id_filter:
+            where_clause = "WHERE r.app_id = ?"
+            params.append(app_id_filter)
+            
+        total_reqs = conn.execute(f"SELECT COUNT(*) as c FROM requests r {where_clause}", params).fetchone()["c"]
+        
+        # Feedback counts
+        fb_where = "WHERE 1=1"
+        if app_id_filter:
+            fb_where += " AND r.app_id = ?"
+            
+        metrics = conn.execute(f"""
+            SELECT 
+                COUNT(*) as total_reviews,
+                SUM(CASE WHEN f.feedback_type = 'false_positive' THEN 1 ELSE 0 END) as false_positives,
+                SUM(CASE WHEN f.feedback_type = 'false_negative' THEN 1 ELSE 0 END) as false_negatives,
+                SUM(CASE WHEN f.feedback_type = 'confirmed' THEN 1 ELSE 0 END) as confirmed
+            FROM feedback f
+            JOIN requests r ON f.request_id = r.id
+            {fb_where}
+        """, params).fetchone()
+        
+        # Per-check accuracy
+        per_check = []
+        rows = conn.execute(f"""
+            SELECT 
+                f.check_name,
+                f.dimension,
+                COUNT(*) as total_reviews,
+                SUM(CASE WHEN f.feedback_type = 'false_positive' THEN 1 ELSE 0 END) as false_positives,
+                SUM(CASE WHEN f.feedback_type = 'false_negative' THEN 1 ELSE 0 END) as false_negatives,
+                SUM(CASE WHEN f.feedback_type = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+                ROUND(
+                    CAST(SUM(CASE WHEN f.feedback_type = 'false_positive' THEN 1 ELSE 0 END) AS FLOAT) 
+                    / NULLIF(COUNT(*), 0) * 100, 1
+                ) as false_positive_rate
+            FROM feedback f
+            JOIN requests r ON f.request_id = r.id
+            WHERE f.check_name IS NOT NULL {fb_where.replace('WHERE 1=1', '')}
+            GROUP BY f.check_name, f.dimension
+            ORDER BY false_positive_rate DESC
+        """, params).fetchall()
+        
+        for row in rows:
+            pc = dict(row)
+            if pc["false_positive_rate"] and pc["false_positive_rate"] > 30.0:
+                pc["suggestion"] = f"Consider loosening {pc['check_name']} threshold (current FP rate > 30%)"
+            elif pc["false_positive_rate"] and pc["false_positive_rate"] < 5.0 and pc["false_negatives"] > 0:
+                pc["suggestion"] = f"Consider tightening {pc['check_name']} threshold (missed {pc['false_negatives']} hazards)"
+            else:
+                pc["suggestion"] = "Operating within normal parameters"
+            per_check.append(pc)
+            
+        total_reviews = metrics["total_reviews"] or 0
+        override_rate = round((total_reviews / total_reqs * 100), 1) if total_reqs else 0.0
+        fp_rate = round((metrics["false_positives"] / total_reviews * 100), 1) if total_reviews else 0.0
+        fn_rate = round((metrics["false_negatives"] / total_reviews * 100), 1) if total_reviews else 0.0
+
+        return {
+            "total_reviews": total_reviews,
+            "override_rate": override_rate,
+            "false_positive_rate": fp_rate,
+            "false_negative_rate": fn_rate,
+            "false_positives": metrics["false_positives"] or 0,
+            "false_negatives": metrics["false_negatives"] or 0,
+            "confirmed": metrics["confirmed"] or 0,
+            "per_check": per_check
+        }
+
+def get_recent_feedback(limit: int = 50) -> list[dict]:
+    """Get paginated list of recent human overrides."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM feedback ORDER BY timestamp DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]

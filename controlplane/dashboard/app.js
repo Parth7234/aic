@@ -27,6 +27,46 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── View Management ─────────────────────────────────────────────────────────
+
+function switchMainView(view) {
+    // Hide all
+    document.getElementById('viewStream').style.display = 'none';
+    document.getElementById('viewQueue').style.display = 'none';
+    document.getElementById('viewHealth').style.display = 'none';
+    
+    // Deactivate all tabs
+    document.getElementById('btnViewStream').classList.remove('active');
+    document.getElementById('btnViewQueue').classList.remove('active');
+    document.getElementById('btnViewHealth').classList.remove('active');
+    
+    document.getElementById('btnViewStream').style.borderBottomColor = 'transparent';
+    document.getElementById('btnViewStream').style.color = 'var(--text-dim)';
+    document.getElementById('btnViewQueue').style.borderBottomColor = 'transparent';
+    document.getElementById('btnViewQueue').style.color = 'var(--text-dim)';
+    document.getElementById('btnViewHealth').style.borderBottomColor = 'transparent';
+    document.getElementById('btnViewHealth').style.color = 'var(--text-dim)';
+    
+    // Show selected
+    if (view === 'stream') {
+        document.getElementById('viewStream').style.display = 'block';
+        document.getElementById('btnViewStream').classList.add('active');
+        document.getElementById('btnViewStream').style.borderBottomColor = 'var(--primary)';
+        document.getElementById('btnViewStream').style.color = 'var(--primary)';
+    } else if (view === 'queue') {
+        document.getElementById('viewQueue').style.display = 'block';
+        document.getElementById('btnViewQueue').classList.add('active');
+        document.getElementById('btnViewQueue').style.borderBottomColor = 'var(--primary)';
+        document.getElementById('btnViewQueue').style.color = 'var(--primary)';
+        loadReviewQueue();
+    } else if (view === 'health') {
+        document.getElementById('viewHealth').style.display = 'block';
+        document.getElementById('btnViewHealth').classList.add('active');
+        document.getElementById('btnViewHealth').style.borderBottomColor = 'var(--primary)';
+        document.getElementById('btnViewHealth').style.color = 'var(--primary)';
+        loadFeedbackMetrics();
+    }
+}
+
 function switchView(viewName) {
     document.querySelectorAll('.top-nav .nav-link').forEach(n => n.classList.remove('active'));
     document.getElementById(`nav-${viewName}`).classList.add('active');
@@ -80,6 +120,7 @@ function handleSSEMessage(msg) {
             break;
         case 'human_action':
             handleHumanAction(msg.data);
+            loadFeedbackMetrics();
             break;
         case 'ping':
         case 'connected':
@@ -90,6 +131,8 @@ function handleSSEMessage(msg) {
 // ── Load Initial Data ───────────────────────────────────────────────────────
 async function loadInitialData() {
     try {
+        loadReviewQueue();
+        loadFeedbackMetrics();
         const [reqRes, statsRes] = await Promise.all([
             fetch('/api/requests?limit=50'),
             fetch('/api/stats'),
@@ -912,3 +955,249 @@ async function savePolicy(policyId, btn) {
     }
 }
 
+
+
+
+// ── Feedback Loop & Review Queue ────────────────────────────────────────────
+
+let reviewQueueCache = [];
+
+async function loadFeedbackMetrics() {
+    try {
+        const res = await fetch('/api/feedback/stats' + (currentAppFilter !== 'all' ? '?app=' + currentAppFilter : ''));
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        // Update Gauges
+        const overrideRing = document.getElementById('gaugeOverrideRing');
+        const overrideVal = document.getElementById('gaugeOverrideValue');
+        if (overrideRing && overrideVal) {
+            overrideVal.textContent = data.override_rate + '%';
+            overrideRing.setAttribute('stroke-dasharray', data.override_rate + ', 100');
+        }
+        
+        const fpRing = document.getElementById('gaugeFPRing');
+        const fpVal = document.getElementById('gaugeFPValue');
+        if (fpRing && fpVal) {
+            fpVal.textContent = data.false_positive_rate + '%';
+            fpRing.setAttribute('stroke-dasharray', data.false_positive_rate + ', 100');
+        }
+        
+        // Update Suggestions
+        const suggContainer = document.getElementById('healthSuggestions');
+        if (suggContainer) {
+            suggContainer.innerHTML = '';
+            let hasSuggestions = false;
+            if (data.per_check) {
+                data.per_check.forEach(pc => {
+                    if (pc.suggestion && pc.suggestion !== 'Operating within normal parameters') {
+                        const div = document.createElement('div');
+                        div.style.marginBottom = '4px';
+                        div.style.color = pc.false_positive_rate > 30 ? 'var(--warning)' : 'var(--text-dim)';
+                        div.innerHTML = '• ' + pc.suggestion;
+                        suggContainer.appendChild(div);
+                        hasSuggestions = true;
+                    }
+                });
+            }
+            suggContainer.style.display = hasSuggestions ? 'block' : 'none';
+        }
+    } catch (err) {
+        console.error('Error loading feedback metrics:', err);
+    }
+}
+
+async function loadReviewQueue() {
+    try {
+        const res = await fetch('/api/requests?limit=20');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        const reviewable = data.requests.filter(r => r.action_taken !== 'pass' && !r.metadata?.human_reviewed);
+        
+        const container = document.getElementById('reviewQueueContainer');
+        const list = document.getElementById('reviewList');
+        if (!container || !list) return;
+        
+        if (reviewable.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        list.innerHTML = '';
+        
+        reviewable.forEach(r => {
+            const el = document.createElement('div');
+            el.className = 'review-card';
+            el.style.padding = '10px';
+            el.style.marginBottom = '8px';
+            el.style.background = 'rgba(255,255,255,0.05)';
+            el.style.borderRadius = '6px';
+            el.style.borderLeft = '3px solid ' + (r.action_taken === 'block' ? 'var(--danger)' : (r.action_taken === 'edit' ? 'var(--warning)' : 'var(--primary)'));
+            
+            let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">';
+            html += '<span style="font-size:11px; color:var(--text-dim);">ID: ' + r.id.substring(0,8) + ' | Action: <strong style="text-transform:uppercase">' + r.action_taken + '</strong></span>';
+            html += '<div>';
+            if (r.action_taken === 'edit') {
+                html += `<button onclick="submitReview('${r.id}', 'approve')" style="background:var(--primary); color:white; border:none; padding:3px 8px; border-radius:3px; margin-right:5px; cursor:pointer; font-size:11px;">Confirm Redaction</button>`;
+                html += `<button onclick="submitReview('${r.id}', 'release')" style="background:var(--surface-highlight); color:white; border:none; padding:3px 8px; border-radius:3px; cursor:pointer; font-size:11px;">Release Original</button>`;
+            } else {
+                html += `<button onclick="submitReview('${r.id}', 'approve')" style="background:var(--primary); color:white; border:none; padding:3px 8px; border-radius:3px; margin-right:5px; cursor:pointer; font-size:11px;">Approve (FP)</button>`;
+                html += `<button onclick="submitReview('${r.id}', 'block')" style="background:var(--danger); color:white; border:none; padding:3px 8px; border-radius:3px; cursor:pointer; font-size:11px;">Confirm Block</button>`;
+            }
+            html += '</div></div>';
+            
+            let preview = r.prompt.substring(0, 80) + '...';
+            html += '<div style="font-size:12px; margin-bottom:4px;"><strong>Prompt:</strong> ' + preview + '</div>';
+            
+            let resPreview = r.response ? r.response.substring(0, 80) + '...' : '';
+            if (r.edited_response) resPreview = r.edited_response.substring(0, 80) + '...';
+            html += '<div style="font-size:12px; color:var(--text-dim);"><strong>Response:</strong> ' + resPreview + '</div>';
+            
+            el.innerHTML = html;
+            list.appendChild(el);
+        });
+        
+    } catch (err) {
+        console.error('Error loading review queue:', err);
+    }
+}
+
+async function submitReview(requestId, action) {
+    try {
+        const res = await fetch('/api/requests/' + requestId + '/action', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: action })
+        });
+        if (res.ok) {
+            loadReviewQueue();
+            loadFeedbackMetrics();
+        }
+    } catch (err) {
+        console.error('Error submitting review:', err);
+    }
+}
+
+async function loadReviewQueue() {
+    try {
+        const res = await fetch('/api/requests?limit=100');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        const reviewable = data.requests.filter(r => r.action_taken === 'edit' || r.action_taken === 'block' || r.action_taken === 'escalate');
+        
+        const badge = document.getElementById('queueBadge');
+        if (badge) {
+            badge.textContent = reviewable.length;
+            badge.style.display = reviewable.length > 0 ? 'inline-block' : 'none';
+        }
+        
+        const list = document.getElementById('reviewQueueList');
+        if (!list) return;
+        
+        if (reviewable.length === 0) {
+            list.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-dim); font-size:14px;">No items pending review.</div>';
+            return;
+        }
+        
+        list.innerHTML = '';
+        reviewable.forEach(r => {
+            const el = document.createElement('div');
+            el.style.padding = '15px';
+            el.style.background = 'rgba(255,255,255,0.03)';
+            el.style.borderRadius = '8px';
+            el.style.borderLeft = '4px solid ' + (r.action_taken === 'block' ? 'var(--danger)' : 'var(--warning)');
+            
+            let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <span style="font-size:12px; color:var(--text-dim);">ID: ${r.id.substring(0,8)} | App: ${r.app_id}</span>
+                            <div>`;
+            
+            if (r.action_taken === 'edit') {
+                html += `<button onclick="submitReview('${r.id}', 'approve')" style="background:var(--primary); color:white; border:none; padding:5px 10px; border-radius:4px; margin-right:8px; cursor:pointer; font-size:12px;">Confirm Redaction</button>`;
+                html += `<button onclick="submitReview('${r.id}', 'release')" style="background:rgba(255,255,255,0.1); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Release Original</button>`;
+            } else {
+                html += `<button onclick="submitReview('${r.id}', 'approve')" style="background:var(--primary); color:white; border:none; padding:5px 10px; border-radius:4px; margin-right:8px; cursor:pointer; font-size:12px;">Approve (False Positive)</button>`;
+                html += `<button onclick="submitReview('${r.id}', 'block')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Confirm Block</button>`;
+            }
+            
+            html += `</div></div>`;
+            html += `<div style="font-size:13px; margin-bottom:6px;"><strong>Prompt:</strong> ${r.prompt.substring(0, 100)}...</div>`;
+            if (r.edited_response || r.response) {
+                html += `<div style="font-size:13px; color:var(--text-dim);"><strong>Response:</strong> ${(r.edited_response || r.response).substring(0, 100)}...</div>`;
+            }
+            
+            el.innerHTML = html;
+            list.appendChild(el);
+        });
+        
+    } catch (err) {
+        console.error('Error loading review queue:', err);
+    }
+}
+
+async function submitReview(requestId, action) {
+    try {
+        const res = await fetch('/api/requests/' + requestId + '/action', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: action })
+        });
+        if (res.ok) {
+            loadReviewQueue();
+            loadFeedbackMetrics();
+        }
+    } catch (err) {
+        console.error('Error submitting review:', err);
+    }
+}
+
+async function loadFeedbackMetrics() {
+    try {
+        const res = await fetch('/api/feedback/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        const overrideRing = document.getElementById('gaugeOverrideRing');
+        const overrideVal = document.getElementById('gaugeOverrideValue');
+        if (overrideRing && overrideVal) {
+            overrideVal.textContent = data.override_rate + '%';
+            overrideRing.setAttribute('stroke-dasharray', data.override_rate + ', 100');
+        }
+        
+        const fpRing = document.getElementById('gaugeFPRing');
+        const fpVal = document.getElementById('gaugeFPValue');
+        if (fpRing && fpVal) {
+            fpVal.textContent = data.false_positive_rate + '%';
+            fpRing.setAttribute('stroke-dasharray', data.false_positive_rate + ', 100');
+        }
+        
+        const suggestionsBox = document.getElementById('healthSuggestions');
+        if (suggestionsBox) {
+            if (data.per_check && data.per_check.length > 0) {
+                let html = '<strong>Threshold Advisories:</strong><ul style="margin-top:5px; margin-bottom:0; padding-left:20px;">';
+                let hasAdvisories = false;
+                data.per_check.forEach(pc => {
+                    if (pc.suggestion.includes('Consider loosening')) {
+                        html += `<li>${pc.suggestion}</li>`;
+                        hasAdvisories = true;
+                    }
+                });
+                html += '</ul>';
+                
+                if (hasAdvisories) {
+                    suggestionsBox.innerHTML = html;
+                    suggestionsBox.style.display = 'block';
+                } else {
+                    suggestionsBox.style.display = 'none';
+                }
+            } else {
+                suggestionsBox.style.display = 'none';
+            }
+        }
+        
+    } catch (err) {
+        console.error('Error loading feedback metrics:', err);
+    }
+}

@@ -1263,3 +1263,12 @@ body {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+
+/* ── Feedback Loop & Review Queue ────────────────────────────────────────── */
+.review-card {
+    transition: all 0.2s ease;
+}
+.review-card:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}

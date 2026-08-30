@@ -111,6 +111,8 @@
                 </div>
             </div>
 
+            
+            
             <!-- Charts -->
             <div class="chart-section glass-panel paper-texture">
                 <h3 class="section-title">
@@ -153,13 +155,30 @@
         </aside>
 
         <!-- ─── Center: Live Feed ──────────────────────────────────────── -->
+        
+        <!-- ── Center: Live Feed ── -->
         <section class="feed-section">
-            <div class="feed-header">
-                <h2 class="feed-title">
-                    <span class="material-symbols-outlined" style="color:var(--primary);font-size:24px">stream</span>
-                    Activity Stream
-                </h2>
-                <div class="feed-filters-group">
+            
+            
+
+            <div class="view-switcher" style="display:flex; gap:20px; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:10px; margin-bottom:20px; align-items:center;">
+                <button id="btnViewStream" class="view-tab active" onclick="switchMainView('stream')" style="background:none; border:none; padding:10px 15px; cursor:pointer; font-size:14px; font-weight:500; border-bottom: 2px solid var(--primary); color:var(--primary);">
+                    <span class="material-symbols-outlined" style="vertical-align:middle; font-size:18px; margin-right:5px;">stream</span>
+                    Live Stream
+                </button>
+                <button id="btnViewQueue" class="view-tab" onclick="switchMainView('queue')" style="background:none; border:none; padding:10px 15px; cursor:pointer; font-size:14px; font-weight:500; color:var(--text-dim); border-bottom: 2px solid transparent; position:relative;">
+                    <span class="material-symbols-outlined" style="vertical-align:middle; font-size:18px; margin-right:5px;">rule</span>
+                    Review Queue <span id="queueBadge" style="background:var(--warning); color:white; font-size:10px; padding:2px 6px; border-radius:10px; margin-left:5px; display:none;">0</span>
+                </button>
+                <button id="btnViewHealth" class="view-tab" onclick="switchMainView('health')" style="background:none; border:none; padding:10px 15px; cursor:pointer; font-size:14px; font-weight:500; color:var(--text-dim); border-bottom: 2px solid transparent;">
+                    <span class="material-symbols-outlined" style="vertical-align:middle; font-size:18px; margin-right:5px;">health_and_safety</span>
+                    System Health
+                </button>
+            </div>
+
+            <div id="viewStream" style="display:block;">
+                <div class="feed-header" style="justify-content:flex-end;">
+                    <div class="feed-filters-group">
                     <div class="feed-filters" id="appFilters">
                         <button class="filter-btn active" data-app="all" onclick="setAppFilter('all', this)">All Apps</button>
                         <button class="filter-btn" data-app="customer_support" onclick="setAppFilter('customer_support', this)">
@@ -193,6 +212,42 @@
                     </div>
                     <p>No AI traffic observed yet.</p>
                     <p class="feed-empty-sub">Click <strong>Simulate Traffic</strong> to generate sample requests.</p>
+                </div>
+            </div>
+            
+            </div> <!-- CLOSE viewStream -->
+            <div id="viewQueue" style="display:none;">
+                <div id="reviewQueueList" style="display:flex; flex-direction:column; gap:10px;">
+                    <div style="padding:20px; text-align:center; color:var(--text-dim); font-size:14px;">No items pending review.</div>
+                </div>
+            </div>
+            
+            <div id="viewHealth" style="display:none; padding:20px;">
+                <div style="display:flex; justify-content:space-around; align-items:center; background:rgba(255,255,255,0.05); padding:30px; border-radius:8px;">
+                    <div class="gauge-wrapper" style="text-align:center;">
+                        <div class="gauge-ring" style="width:120px; height:120px; margin:0 auto 10px;">
+                            <svg viewBox="0 0 36 36" style="width:100%; height:100%;">
+                                <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="2.5" stroke="rgba(0,0,0,0.1)"/>
+                                <path class="gauge-fill" id="gaugeOverrideRing" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="0, 100" stroke-width="2.5" stroke="#f39c12"/>
+                            </svg>
+                            <div class="gauge-value" id="gaugeOverrideValue" style="font-size: 24px; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); font-weight:bold;">0%</div>
+                        </div>
+                        <div class="gauge-label" style="font-size: 14px; font-weight:500;">Override Rate</div>
+                    </div>
+                    
+                    <div class="gauge-wrapper" style="text-align:center;">
+                        <div class="gauge-ring" style="width:120px; height:120px; margin:0 auto 10px;">
+                            <svg viewBox="0 0 36 36" style="width:100%; height:100%;">
+                                <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="2.5" stroke="rgba(0,0,0,0.1)"/>
+                                <path class="gauge-fill" id="gaugeFPRing" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="0, 100" stroke-width="2.5" stroke="#e74c3c"/>
+                            </svg>
+                            <div class="gauge-value" id="gaugeFPValue" style="font-size: 24px; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); font-weight:bold;">0%</div>
+                        </div>
+                        <div class="gauge-label" style="font-size: 14px; font-weight:500;">False Positives</div>
+                    </div>
+                </div>
+                
+                <div id="healthSuggestions" style="margin-top:20px; padding:15px; background:rgba(231,76,60,0.1); border-left:4px solid #e74c3c; border-radius:4px; display:none;">
                 </div>
             </div>
         </section>
@@ -235,6 +290,6 @@
         </div>
     </main>
 
-    <script src="/dashboard/app.js?v=5"></script>
+    <script src="/dashboard/app.js?v=6"></script>
 </body>
 </html>
